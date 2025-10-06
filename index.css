@@ -20,8 +20,8 @@
   --color-qc-end-data: #f6f9f2;   /* Lighter Pale Green for contrast */
 
   /* General UI */
-  --color-future-actual-bg: #f5f5f5;
-  --color-future-actual-text: #bdbdbd;
+  --color-inactive-cell-bg: #f5f5f5;
+  --color-inactive-cell-text: #bdbdbd;
 }
 
 body {
@@ -209,9 +209,9 @@ tbody tr:nth-child(odd) .static-col-2 {
 .bg-qc-end-plan { background-color: var(--color-qc-end-plan-bg); }
 .bg-qc-end-actual { background-color: var(--color-qc-end-data); }
 
-.future-actual {
-    background-color: var(--color-future-actual-bg);
-    color: var(--color-future-actual-text);
+.inactive-cell {
+    background-color: var(--color-inactive-cell-bg) !important;
+    color: var(--color-inactive-cell-text) !important;
 }
 
 /* Popover Styles */

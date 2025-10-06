@@ -291,33 +291,52 @@
 
     // 1. Render summaries and calculate accumulated values
     for (const task of ['neua-fa', 'qc-ww', 'qc-end']) {
-      const table = document.getElementById(`summary-${task}`);
-      const lastEnteredWeek = getLastEnteredActualWeekIndex(task);
-      let accPlan = 0;
-      let accActual = 0;
+        const table = document.getElementById(`summary-${task}`);
+        
+        const planRange = getTaskWeekRange(task, 'plan');
+        const actualRange = getTaskWeekRange(task, 'actual');
 
-      for (let week = 0; week < WEEKS; week++) {
-        const planValue = summaryData[task].plan[week];
-        const actualValue = summaryData[task].actual[week];
-        accPlan += planValue;
-      
-        (table.querySelector(`[data-row-type="plan"] [data-week="${week}"]`)).textContent = planValue.toString();
-        (table.querySelector(`[data-row-type="actual"] [data-week="${week}"]`)).textContent = actualValue.toString();
-        (table.querySelector(`[data-row-type="acc-plan"] [data-week="${week}"]`)).textContent = accPlan.toString();
-      
-        const accActualCell = table.querySelector(`[data-row-type="acc-actual"] [data-week="${week}"]`);
+        let accPlan = 0;
+        let accActual = 0;
 
-        if (lastEnteredWeek !== -1 && week > lastEnteredWeek) {
-          // This is a future week for actuals
-          accActualCell.textContent = '';
-          accActualCell.classList.add('future-actual');
-        } else {
-          // This is a past or current week for actuals
-          accActual += actualValue;
-          accActualCell.textContent = accActual.toString();
-          accActualCell.classList.remove('future-actual');
+        for (let week = 0; week < WEEKS; week++) {
+            const planValue = summaryData[task].plan[week];
+            const actualValue = summaryData[task].actual[week];
+            
+            // Always calculate accumulated values
+            accPlan += planValue;
+            accActual += actualValue;
+
+            const planCell = table.querySelector(`[data-row-type="plan"] [data-week="${week}"]`);
+            const accPlanCell = table.querySelector(`[data-row-type="acc-plan"] [data-week="${week}"]`);
+            const actualCell = table.querySelector(`[data-row-type="actual"] [data-week="${week}"]`);
+            const accActualCell = table.querySelector(`[data-row-type="acc-actual"] [data-week="${week}"]`);
+            
+            const allCells = [planCell, accPlanCell, actualCell, accActualCell];
+            allCells.forEach(cell => cell.classList.remove('inactive-cell'));
+
+            // --- Plan and Acc. Plan Rows ---
+            if (planRange.first !== -1 && week >= planRange.first && week <= planRange.last) {
+                planCell.textContent = planValue > 0 ? planValue.toString() : '0';
+                accPlanCell.textContent = accPlan > 0 ? accPlan.toString() : '0';
+            } else {
+                planCell.textContent = '';
+                accPlanCell.textContent = '';
+                planCell.classList.add('inactive-cell');
+                accPlanCell.classList.add('inactive-cell');
+            }
+
+            // --- Actual and Acc. Actual Rows ---
+            if (actualRange.first !== -1 && week >= actualRange.first && week <= actualRange.last) {
+                actualCell.textContent = actualValue > 0 ? actualValue.toString() : '0';
+                accActualCell.textContent = accActual > 0 ? accActual.toString() : '0';
+            } else {
+                actualCell.textContent = '';
+                accActualCell.textContent = '';
+                actualCell.classList.add('inactive-cell');
+                accActualCell.classList.add('inactive-cell');
+            }
         }
-      }
     }
     
     // 2. Calculate and render main table totals in the footer
@@ -337,17 +356,35 @@
   }
 
   // --- UTILITY FUNCTIONS ---
-  function getLastEnteredActualWeekIndex(task) {
-      let lastWeek = -1;
-      for (let week = WEEKS - 1; week >= 0; week--) {
-        for (const floor of FLOORS) {
-          const cellData = state[floor][week].actual;
-          if (cellData.task === task && cellData.value !== null && cellData.value > 0) {
-            return week; // Found the last week with data for this task
-          }
+  function getTaskWeekRange(task, type) {
+    let first = -1;
+    let last = -1;
+    
+    // Find first week with data
+    for (let week = 0; week < WEEKS; week++) {
+      for (const floor of FLOORS) {
+        const cellData = state[floor][week][type];
+        if (cellData.task === task && cellData.value !== null && cellData.value > 0) {
+          first = week;
+          break; 
         }
       }
-      return lastWeek; // No actual data found for this task
+      if (first !== -1) break;
+    }
+
+    // Find last week with data
+    for (let week = WEEKS - 1; week >= 0; week--) {
+      for (const floor of FLOORS) {
+        const cellData = state[floor][week][type];
+        if (cellData.task === task && cellData.value !== null && cellData.value > 0) {
+          last = week;
+          break;
+        }
+      }
+      if (last !== -1) break;
+    }
+
+    return { first, last };
   }
 
   function updateStatus(message, color, autoClear = true) {
@@ -387,7 +424,7 @@
           'qc-end-plan': { fill: getFill('e2eacb'), font: getFont('FF212121', true), border, alignment: centerAlign },
           'qc-end-actual': { fill: getFill('ebf1de'), font: getFont('FF212121', true), border, alignment: centerAlign },
           'qc-end-header': { fill: getFill('9bbb59'), font: getFont('FF212121', true), border, alignment: centerAlign },
-          'future-actual': { fill: getFill('FFF5F5F5'), font: getFont('FFBDBDBD'), border, alignment: centerAlign },
+          'inactive-cell': { fill: getFill('FFF5F5F5'), font: getFont('FFBDBDBD'), border, alignment: centerAlign },
           'default': { border, alignment: centerAlign },
           'header': { font: { bold: true }, border, alignment: centerAlign, fill: getFill('FFE0E0E0') },
           'row-label': { font: { bold: true }, border, alignment: { vertical: 'middle', horizontal: 'left', indent: 1 } },
@@ -552,53 +589,71 @@
           weekHeaderRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
               if (colNumber > 1) cell.style = styles.header;
           });
+          
+          const planRange = getTaskWeekRange(taskInfo.id, 'plan');
+          const actualRange = getTaskWeekRange(taskInfo.id, 'actual');
 
-          const rows = [
-              { label: 'Plan', type: 'plan', acc: false },
-              { label: 'Acc. Plan', type: 'plan', acc: true },
-              { label: 'Actual', type: 'actual', acc: false },
-              { label: 'Acc. Actual', type: 'actual', acc: true }
-          ];
-
-          let accPlan = 0;
-          let accActual = 0;
-          const lastEnteredWeek = getLastEnteredActualWeekIndex(taskInfo.id);
-
-          rows.forEach(rowData => {
-              const row = sheet.addRow([rowData.label]);
-              row.getCell(1).style = styles['row-label'];
-              for(let week = 0; week < WEEKS; week++) {
-                  let value = 0;
-                  let style = styles.default;
-                  if(rowData.type === 'plan') {
-                      const weeklyValue = summaryData[taskInfo.id].plan[week];
-                      if(rowData.acc) {
-                          accPlan += weeklyValue;
-                          value = accPlan;
-                      } else {
-                          value = weeklyValue;
-                      }
-                  } else { // actual
-                      const weeklyValue = summaryData[taskInfo.id].actual[week];
-                      if(rowData.acc) {
-                          if(lastEnteredWeek !== -1 && week > lastEnteredWeek) {
-                              value = '';
-                              style = styles['future-actual'];
-                          } else {
-                              accActual += weeklyValue;
-                              value = accActual;
-                          }
-                      } else {
-                          value = weeklyValue;
-                      }
-                  }
-                
-                  const cell = row.getCell(week + 2);
-                  if (value !== 0 && value !== '') cell.value = value;
-                  else cell.value = null;
-                  cell.style = style;
+          // Row 1: Plan
+          const planRow = sheet.addRow(['Plan']);
+          planRow.getCell(1).style = styles['row-label'];
+          for (let week = 0; week < WEEKS; week++) {
+              const cell = planRow.getCell(week + 2);
+              if (planRange.first !== -1 && week >= planRange.first && week <= planRange.last) {
+                  const val = summaryData[taskInfo.id].plan[week];
+                  cell.value = val > 0 ? val : null;
+                  cell.style = styles.default;
+              } else {
+                  cell.value = null;
+                  cell.style = styles['inactive-cell'];
               }
-          });
+          }
+          
+          // Row 2: Acc. Plan
+          const accPlanRow = sheet.addRow(['Acc. Plan']);
+          accPlanRow.getCell(1).style = styles['row-label'];
+          let accPlan = 0;
+          for (let week = 0; week < WEEKS; week++) {
+              accPlan += summaryData[taskInfo.id].plan[week];
+              const cell = accPlanRow.getCell(week + 2);
+              if (planRange.first !== -1 && week >= planRange.first && week <= planRange.last) {
+                  cell.value = accPlan > 0 ? accPlan : null;
+                  cell.style = styles.default;
+              } else {
+                  cell.value = null;
+                  cell.style = styles['inactive-cell'];
+              }
+          }
+
+          // Row 3: Actual
+          const actualRow = sheet.addRow(['Actual']);
+          actualRow.getCell(1).style = styles['row-label'];
+          for (let week = 0; week < WEEKS; week++) {
+              const cell = actualRow.getCell(week + 2);
+              if (actualRange.first !== -1 && week >= actualRange.first && week <= actualRange.last) {
+                  const val = summaryData[taskInfo.id].actual[week];
+                  cell.value = val > 0 ? val : null;
+                  cell.style = styles.default;
+              } else {
+                  cell.value = null;
+                  cell.style = styles['inactive-cell'];
+              }
+          }
+
+          // Row 4: Acc. Actual
+          const accActualRow = sheet.addRow(['Acc. Actual']);
+          accActualRow.getCell(1).style = styles['row-label'];
+          let accActual = 0;
+          for (let week = 0; week < WEEKS; week++) {
+              accActual += summaryData[taskInfo.id].actual[week];
+              const cell = accActualRow.getCell(week + 2);
+              if (actualRange.first !== -1 && week >= actualRange.first && week <= actualRange.last) {
+                  cell.value = accActual > 0 ? accActual : null;
+                  cell.style = styles.default;
+              } else {
+                  cell.value = null;
+                  cell.style = styles['inactive-cell'];
+              }
+          }
       });
 
       // --- DOWNLOAD ---
