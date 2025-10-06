@@ -185,8 +185,14 @@ declare var ExcelJS: any;
     const { floor, week, type } = activeCell.dataset;
     if (!floor || !week || !type) return;
 
-    const value = popoverInput.value ? parseInt(popoverInput.value, 10) : null;
-    state[floor][week][type as RowType] = { value, task };
+    // If task is null, it's a 'clear' operation. Both value and task should be null.
+    if (task === null) {
+      state[floor][week][type as RowType] = { value: null, task: null };
+    } else {
+      // Otherwise, it's a task assignment. Read the value from the input.
+      const value = popoverInput.value ? parseInt(popoverInput.value, 10) : null;
+      state[floor][week][type as RowType] = { value, task };
+    }
 
     renderAll();
     saveState();
