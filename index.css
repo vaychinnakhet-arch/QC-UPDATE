@@ -1,0 +1,397 @@
+/* General Styles */
+:root {
+  /* Palette from Image */
+  --color-text-dark: #000000;
+  --color-text-light: #ffffff;
+
+  /* Neua Fa */
+  --color-neua-fa-header: #f79646; /* Orange */
+  --color-neua-fa-plan-bg: #fddca9; /* Darker Pale Orange */
+  --color-neua-fa-data: #feefd8;   /* Pale Yellow/Orange */
+
+  /* QC WW */
+  --color-qc-ww-header: #4f81bd; /* Blue */
+  --color-qc-ww-plan-bg: #c9d8e8; /* Darker Pale Blue */
+  --color-qc-ww-data: #dce6f1;   /* Pale Blue */
+
+  /* QC End */
+  --color-qc-end-header: #9bbb59; /* Green */
+  --color-qc-end-plan-bg: #e2eacb; /* Darker Pale Green */
+  --color-qc-end-data: #ebf1de;   /* Pale Green */
+
+  /* General UI */
+  --color-future-actual-bg: #f5f5f5;
+  --color-future-actual-text: #bdbdbd;
+}
+
+body {
+  font-family: 'Sarabun', sans-serif;
+  background-color: #f4f7f6;
+  color: #333;
+  margin: 0;
+  padding: 20px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.container {
+  max-width: 1800px;
+  margin: 0 auto;
+  background-color: #fff;
+  padding: 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Header */
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.header-info {
+  text-align: left;
+  font-size: 0.9em;
+  color: #555;
+  flex-shrink: 0;
+  min-width: 150px;
+}
+.header-info p {
+  margin: 0;
+}
+
+.header-title {
+  text-align: center;
+  flex-grow: 1;
+}
+.header-title h1 {
+  margin: 0;
+  font-size: 1.8em;
+  color: #1a237e; /* Dark Blue */
+}
+.header-title p {
+    margin: 4px 0 0;
+    font-size: 1em;
+    color: #333;
+}
+
+.header-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    min-width: 150px;
+}
+  
+.status-container {
+    font-size: 0.9em;
+    color: #555;
+}
+
+#status-indicator {
+  font-weight: bold;
+}
+
+.export-button {
+    background-color: #43a047; /* Green */
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'Sarabun', sans-serif;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+}
+.export-button:hover {
+    background-color: #388e3c; /* Darker Green */
+}
+
+
+/* Table Styles */
+.table-wrapper {
+  overflow-x: auto;
+  margin-bottom: 20px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1600px; /* Ensure table has a minimum width for all columns */
+  white-space: nowrap;
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 8px 10px;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+thead th {
+  background-color: #f2f2f2;
+  font-weight: 700;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+thead .header-main th {
+    background-color: #e0e0e0;
+}
+
+/* Color coding for Main Table Headers */
+thead .header-main .th-neua-fa, thead .header-sub .th-neua-fa { background-color: var(--color-neua-fa-header) !important; color: var(--color-text-dark) !important; }
+thead .header-main .th-qc-ww, thead .header-sub .th-qc-ww { background-color: var(--color-qc-ww-header) !important; color: var(--color-text-light) !important; }
+thead .header-main .th-qc-end, thead .header-sub .th-qc-end { background-color: var(--color-qc-end-header) !important; color: var(--color-text-dark) !important; }
+
+/* Color coding for Floor Totals */
+tbody td[data-task-total="neua-fa"],
+tbody td[data-task-sent="neua-fa"] { background-color: var(--color-neua-fa-data) !important; color: var(--color-text-dark) !important; }
+
+tbody td[data-task-total="qc-ww"],
+tbody td[data-task-sent="qc-ww"] { background-color: var(--color-qc-ww-data) !important; color: var(--color-text-dark) !important; }
+
+tbody td[data-task-total="qc-end"],
+tbody td[data-task-sent="qc-end"] { background-color: var(--color-qc-end-data) !important; color: var(--color-text-dark) !important; }
+
+
+/* Sticky first column for horizontal scroll */
+.static-col-1 {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background-color: #f9f9f9;
+    min-width: 50px;
+}
+
+/* Plan/Actual Label Column */
+.static-col-2 {
+    min-width: 80px;
+    text-align: left;
+    padding-left: 10px;
+}
+
+thead .static-col-1 {
+    z-index: 3;
+}
+tfoot .static-col-1 {
+    z-index: 1;
+    background-color: #f2f2f2;
+}
+
+
+/* Data Row Styles */
+#main-schedule-table tbody tr,
+#main-schedule-table tbody tr td {
+    background-color: #fff;
+}
+
+#main-schedule-table tbody tr:hover > td {
+  background-color: #f0f0f0;
+}
+#main-schedule-table tbody .static-col-1 {
+    background-color: #fff;
+}
+#main-schedule-table tbody tr:hover .static-col-1 {
+    background-color: #f0f0f0;
+}
+
+
+.row-label {
+  font-weight: 700;
+  color: #555;
+}
+
+.editable-cell {
+    cursor: pointer;
+    min-width: 40px;
+}
+.editable-cell:hover {
+    background-color: #e3f2fd !important;
+}
+
+/* Color Coding for Tasks in Main Table */
+.bg-neua-fa-plan { background-color: var(--color-neua-fa-plan-bg) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+.bg-neua-fa-actual { background-color: var(--color-neua-fa-data) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+.bg-qc-ww-plan { background-color: var(--color-qc-ww-plan-bg) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+.bg-qc-ww-actual { background-color: var(--color-qc-ww-data) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+.bg-qc-end-plan { background-color: var(--color-qc-end-plan-bg) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+.bg-qc-end-actual { background-color: var(--color-qc-end-data) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+
+/* Footer (Total Row) */
+tfoot th, tfoot td {
+    background-color: #f2f2f2; /* Match header grey */
+    font-weight: 700;
+}
+
+#total-neua-fa-plan,
+#total-neua-fa-sent { background-color: var(--color-neua-fa-header) !important; color: var(--color-text-dark) !important; }
+#total-qc-ww-plan,
+#total-qc-ww-sent { background-color: var(--color-qc-ww-header) !important; color: var(--color-text-light) !important; }
+#total-qc-end-plan,
+#total-qc-end-sent { background-color: var(--color-qc-end-header) !important; color: var(--color-text-dark) !important; }
+
+
+/* Summary Section */
+.summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 2px solid #e0e0e0;
+}
+
+.summary-table-container {
+    overflow-x: auto;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border: 1px solid #e0e0e0;
+}
+
+.summary-table {
+    width: 100%;
+    min-width: 0;
+}
+
+.summary-table th, .summary-table td {
+    font-size: 13px;
+    padding: 6px;
+    white-space: nowrap;
+    border: 1px solid #e0e0e0;
+}
+
+.summary-table thead th {
+    font-size: 11px;
+    padding: 4px;
+}
+.summary-table thead tr:first-child th {
+    font-size: 1.1em;
+}
+
+.summary-table .row-label {
+    background-color: #f5f5f5;
+    text-align: left;
+    padding-left: 8px;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+}
+
+/* Summary Table Body Styles */
+.summary-table tbody tr {
+    background-color: #fff;
+    color: #212121;
+}
+
+/* --- Theme for Neua Fa --- */
+#summary-container-neua-fa thead tr:first-child th {
+    background-color: var(--color-neua-fa-header);
+    color: var(--color-text-dark);
+}
+
+/* --- Theme for QC WW --- */
+#summary-container-qc-ww thead tr:first-child th {
+    background-color: var(--color-qc-ww-header);
+    color: var(--color-text-light);
+}
+
+/* --- Theme for QC End --- */
+#summary-container-qc-end thead tr:first-child th {
+    background-color: var(--color-qc-end-header);
+    color: var(--color-text-dark);
+}
+
+/* Future Actual Cells Styling */
+.future-actual {
+    background-color: var(--color-future-actual-bg) !important;
+    color: var(--color-future-actual-text) !important;
+}
+
+/* Popover Styles */
+.popover {
+  position: absolute;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+  padding: 12px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 220px;
+}
+
+.popover-input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+  font-size: 16px;
+  text-align: center;
+}
+
+.popover-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.popover-button {
+  border: none;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 12px;
+  transition: transform 0.1s ease;
+}
+.popover-button[data-task="neua-fa"] { background-color: var(--color-neua-fa-data); color: var(--color-text-dark); }
+.popover-button[data-task="qc-ww"] { background-color: var(--color-qc-ww-data); color: var(--color-text-dark); }
+.popover-button[data-task="qc-end"] { background-color: var(--color-qc-end-data); color: var(--color-text-dark); }
+
+.popover-button:hover {
+    transform: scale(1.05);
+}
+
+.popover-controls {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+}
+.popover-controls button {
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.popover-controls button:hover {
+    background: #e0e0e0;
+}
+
+
+/* Responsive */
+@media (max-width: 768px) {
+  body {
+    padding: 10px;
+  }
+  .container {
+    padding: 12px;
+  }
+  .header-title h1 {
+    font-size: 1.4em;
+  }
+}
