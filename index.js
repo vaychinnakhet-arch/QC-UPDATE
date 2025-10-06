@@ -3,23 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-// Let TypeScript know that ExcelJS is available on the global scope
-declare var ExcelJS: any;
-
 // FIX: Wrapped the code in an IIFE to prevent global scope pollution.
 (() => {
-  // --- TYPE DEFINITIONS ---
-  type Task = 'neua-fa' | 'qc-ww' | 'qc-end';
-  type CellData = {
-    value: number | null;
-    task: Task | null;
-  };
-  type RowType = 'plan' | 'actual';
-  type AppState = Record<string, Record<string, {
-    plan: CellData;
-    actual: CellData;
-  }>>;
-
   // --- CONSTANTS ---
   const FLOORS = [2, 3, 4, 5, 6, 7, 8];
   const WEEKS = 16;
@@ -27,17 +12,17 @@ declare var ExcelJS: any;
   const LOCAL_STORAGE_KEY = 'schedule-app-state';
 
   // --- DOM ELEMENTS ---
-  const mainTableBody = document.querySelector('#main-schedule-table tbody') as HTMLTableSectionElement;
-  const popover = document.getElementById('popover') as HTMLDivElement;
-  const popoverInput = document.getElementById('popover-input') as HTMLInputElement;
-  const popoverClear = document.getElementById('popover-clear') as HTMLButtonElement;
-  const popoverCancel = document.getElementById('popover-cancel') as HTMLButtonElement;
-  const statusIndicator = document.getElementById('status-indicator') as HTMLSpanElement;
-  const exportButton = document.getElementById('export-excel-btn') as HTMLButtonElement;
+  const mainTableBody = document.querySelector('#main-schedule-table tbody');
+  const popover = document.getElementById('popover');
+  const popoverInput = document.getElementById('popover-input');
+  const popoverClear = document.getElementById('popover-clear');
+  const popoverCancel = document.getElementById('popover-cancel');
+  const statusIndicator = document.getElementById('status-indicator');
+  const exportButton = document.getElementById('export-excel-btn');
 
   // --- STATE ---
-  let state: AppState = {};
-  let activeCell: HTMLElement | null = null;
+  let state = {};
+  let activeCell = null;
 
   // --- INITIALIZATION ---
   document.addEventListener('DOMContentLoaded', () => {
@@ -100,14 +85,14 @@ declare var ExcelJS: any;
   }
 
   function createSummaryTables() {
-      const summaryTasks: {id: Task, name: string}[] = [
+      const summaryTasks = [
           {id: 'neua-fa', name: 'สรุป QC เหนือฝ้า'},
           {id: 'qc-ww', name: 'สรุป QC WW'},
           {id: 'qc-end', name: 'สรุป QC End'},
       ];
 
       summaryTasks.forEach(taskInfo => {
-          const table = document.getElementById(`summary-${taskInfo.id}`) as HTMLTableElement;
+          const table = document.getElementById(`summary-${taskInfo.id}`);
           if (!table) return;
 
           const headerTitleRow = `<tr><th colspan="${WEEKS + 1}">${taskInfo.name}</th></tr>`;
@@ -132,7 +117,7 @@ declare var ExcelJS: any;
   // --- EVENT LISTENERS ---
   function addEventListeners() {
     mainTableBody.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
+      const target = e.target;
       if (target.classList.contains('editable-cell')) {
         showPopover(target);
       }
@@ -140,8 +125,8 @@ declare var ExcelJS: any;
 
     popover.addEventListener('click', (e) => {
       e.stopPropagation();
-      const target = e.target as HTMLElement;
-      const task = target.dataset.task as Task;
+      const target = e.target;
+      const task = target.dataset.task;
       if (task) {
         updateCell(task);
       }
@@ -150,7 +135,7 @@ declare var ExcelJS: any;
     popoverClear.addEventListener('click', () => updateCell(null));
     popoverCancel.addEventListener('click', hidePopover);
     document.addEventListener('click', (e) => {
-      if (popover.style.display === 'block' && !popover.contains(e.target as Node) && e.target !== activeCell) {
+      if (popover.style.display === 'block' && !popover.contains(e.target) && e.target !== activeCell) {
         hidePopover();
       }
     });
@@ -159,12 +144,12 @@ declare var ExcelJS: any;
 
 
   // --- POPOVER LOGIC ---
-  function showPopover(cell: HTMLElement) {
+  function showPopover(cell) {
     activeCell = cell;
     const { floor, week, type } = cell.dataset;
     if (!floor || !week || !type) return;
 
-    const cellData = state[floor][week][type as RowType];
+    const cellData = state[floor][week][type];
     popoverInput.value = cellData.value?.toString() || '';
   
     const rect = cell.getBoundingClientRect();
@@ -180,13 +165,13 @@ declare var ExcelJS: any;
   }
 
   // --- DATA & RENDER LOGIC ---
-  function updateCell(task: Task | null) {
+  function updateCell(task) {
     if (!activeCell) return;
     const { floor, week, type } = activeCell.dataset;
     if (!floor || !week || !type) return;
 
     const value = popoverInput.value ? parseInt(popoverInput.value, 10) : null;
-    state[floor][week][type as RowType] = { value, task };
+    state[floor][week][type] = { value, task };
 
     renderAll();
     saveState();
@@ -206,7 +191,7 @@ declare var ExcelJS: any;
         const actualCellData = state[floor][week].actual;
 
         // Render Plan Cell
-        const planCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-week="${week}"][data-type="plan"]`) as HTMLElement;
+        const planCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-week="${week}"][data-type="plan"]`);
         planCell.textContent = planCellData.value?.toString() || '';
         planCell.className = 'editable-cell'; // Reset classes
         if (planCellData.task) {
@@ -214,7 +199,7 @@ declare var ExcelJS: any;
         }
       
         // Render Actual Cell
-        const actualCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-week="${week}"][data-type="actual"]`) as HTMLElement;
+        const actualCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-week="${week}"][data-type="actual"]`);
         actualCell.textContent = actualCellData.value?.toString() || '';
         actualCell.className = 'editable-cell'; // Reset classes
 
@@ -228,7 +213,7 @@ declare var ExcelJS: any;
 
   function renderFloorTotals() {
       for (const floor of FLOORS) {
-          const floorTotals: Record<Task, { plan: number; actual: number }> = {
+          const floorTotals = {
               'neua-fa': { plan: 0, actual: 0 },
               'qc-ww': { plan: 0, actual: 0 },
               'qc-end': { plan: 0, actual: 0 },
@@ -275,7 +260,7 @@ declare var ExcelJS: any;
 
 
   function getSummaryData() {
-      const summaryData: Record<Task, Record<RowType, number[]>> = {
+      const summaryData = {
         'neua-fa': { plan: Array(WEEKS).fill(0), actual: Array(WEEKS).fill(0) },
         'qc-ww': { plan: Array(WEEKS).fill(0), actual: Array(WEEKS).fill(0) },
         'qc-end': { plan: Array(WEEKS).fill(0), actual: Array(WEEKS).fill(0) },
@@ -284,7 +269,7 @@ declare var ExcelJS: any;
       // Calculate weekly totals from state
       for (const floor of FLOORS) {
         for (let week = 0; week < WEEKS; week++) {
-          for (const type of ['plan', 'actual'] as RowType[]) {
+          for (const type of ['plan', 'actual']) {
             const cellData = state[floor][week][type];
             if (cellData.task && cellData.value) {
               summaryData[cellData.task][type][week] += cellData.value;
@@ -299,8 +284,8 @@ declare var ExcelJS: any;
     const summaryData = getSummaryData();
 
     // 1. Render summaries and calculate accumulated values
-    for (const task of ['neua-fa', 'qc-ww', 'qc-end'] as Task[]) {
-      const table = document.getElementById(`summary-${task}`) as HTMLTableElement;
+    for (const task of ['neua-fa', 'qc-ww', 'qc-end']) {
+      const table = document.getElementById(`summary-${task}`);
       const lastEnteredWeek = getLastEnteredActualWeekIndex(task);
       let accPlan = 0;
       let accActual = 0;
@@ -310,11 +295,11 @@ declare var ExcelJS: any;
         const actualValue = summaryData[task].actual[week];
         accPlan += planValue;
       
-        (table.querySelector(`[data-row-type="plan"] [data-week="${week}"]`) as HTMLElement).textContent = planValue.toString();
-        (table.querySelector(`[data-row-type="actual"] [data-week="${week}"]`) as HTMLElement).textContent = actualValue.toString();
-        (table.querySelector(`[data-row-type="acc-plan"] [data-week="${week}"]`) as HTMLElement).textContent = accPlan.toString();
+        (table.querySelector(`[data-row-type="plan"] [data-week="${week}"]`)).textContent = planValue.toString();
+        (table.querySelector(`[data-row-type="actual"] [data-week="${week}"]`)).textContent = actualValue.toString();
+        (table.querySelector(`[data-row-type="acc-plan"] [data-week="${week}"]`)).textContent = accPlan.toString();
       
-        const accActualCell = table.querySelector(`[data-row-type="acc-actual"] [data-week="${week}"]`) as HTMLElement;
+        const accActualCell = table.querySelector(`[data-row-type="acc-actual"] [data-week="${week}"]`);
 
         if (lastEnteredWeek !== -1 && week > lastEnteredWeek) {
           // This is a future week for actuals
@@ -337,16 +322,16 @@ declare var ExcelJS: any;
     const totalQcEndPlan = summaryData['qc-end'].plan.reduce((a, b) => a + b, 0);
     const totalQcEndActual = summaryData['qc-end'].actual.reduce((a, b) => a + b, 0);
     
-    document.getElementById('total-neua-fa-plan')!.textContent = totalNeuaFaPlan > 0 ? totalNeuaFaPlan.toString() : '';
-    document.getElementById('total-neua-fa-sent')!.textContent = totalNeuaFaActual > 0 ? totalNeuaFaActual.toString() : '';
-    document.getElementById('total-qc-ww-plan')!.textContent = totalQcWwPlan > 0 ? totalQcWwPlan.toString() : '';
-    document.getElementById('total-qc-ww-sent')!.textContent = totalQcWwActual > 0 ? totalQcWwActual.toString() : '';
-    document.getElementById('total-qc-end-plan')!.textContent = totalQcEndPlan > 0 ? totalQcEndPlan.toString() : '';
-    document.getElementById('total-qc-end-sent')!.textContent = totalQcEndActual > 0 ? totalQcEndActual.toString() : '';
+    document.getElementById('total-neua-fa-plan').textContent = totalNeuaFaPlan > 0 ? totalNeuaFaPlan.toString() : '';
+    document.getElementById('total-neua-fa-sent').textContent = totalNeuaFaActual > 0 ? totalNeuaFaActual.toString() : '';
+    document.getElementById('total-qc-ww-plan').textContent = totalQcWwPlan > 0 ? totalQcWwPlan.toString() : '';
+    document.getElementById('total-qc-ww-sent').textContent = totalQcWwActual > 0 ? totalQcWwActual.toString() : '';
+    document.getElementById('total-qc-end-plan').textContent = totalQcEndPlan > 0 ? totalQcEndPlan.toString() : '';
+    document.getElementById('total-qc-end-sent').textContent = totalQcEndActual > 0 ? totalQcEndActual.toString() : '';
   }
 
   // --- UTILITY FUNCTIONS ---
-  function getLastEnteredActualWeekIndex(task: Task): number {
+  function getLastEnteredActualWeekIndex(task) {
       let lastWeek = -1;
       for (let week = WEEKS - 1; week >= 0; week--) {
         for (const floor of FLOORS) {
@@ -359,7 +344,7 @@ declare var ExcelJS: any;
       return lastWeek; // No actual data found for this task
   }
 
-  function updateStatus(message: string, color: string, autoClear: boolean = true) {
+  function updateStatus(message, color, autoClear = true) {
       if(statusIndicator) {
           statusIndicator.textContent = message;
           statusIndicator.style.color = color;
@@ -381,12 +366,12 @@ declare var ExcelJS: any;
       workbook.created = new Date();
   
       // --- Define Styles ---
-      const getFill = (color: string) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: color } });
-      const getFont = (color: string, bold: boolean = false) => ({ color: { argb: color }, bold });
+      const getFill = (color) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: color } });
+      const getFont = (color, bold = false) => ({ color: { argb: color }, bold });
       const border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       const centerAlign = { vertical: 'middle', horizontal: 'center' };
 
-      const styles: Record<string, any> = {
+      const styles = {
           'neua-fa-plan': { fill: getFill('fddca9'), font: getFont('FF212121', true), border, alignment: centerAlign },
           'neua-fa-actual': { fill: getFill('feefd8'), font: getFont('FF212121', true), border, alignment: centerAlign },
           'neua-fa-header': { fill: getFill('f79646'), font: getFont('FF212121', true), border, alignment: centerAlign },
@@ -418,13 +403,13 @@ declare var ExcelJS: any;
           'ก.ย.', '', 'ต.ค.', '', '', '', 'พ.ย.', '', '', '', '',
           'ธ.ค.', '', '', '', '', 'หมายเหตุ'
       ]);
-      headerRow1.eachCell(c => c.style = styles.header!);
+      headerRow1.eachCell(c => c.style = styles.header);
     
       const headerRow2 = mainSheet.addRow([
           '', 'ทั้งหมด', 'ส่ง', 'ทั้งหมด', 'ส่ง', 'ทั้งหมด', 'ส่ง', '',
           ...WEEK_HEADERS.map(h => h.split('/')[0]), ''
       ]);
-      headerRow2.eachCell(c => c.style = styles.header!);
+      headerRow2.eachCell(c => c.style = styles.header);
     
       mainSheet.mergeCells('A1:A2'); mainSheet.mergeCells('H1:H2'); mainSheet.mergeCells('Y1:Y2');
       mainSheet.mergeCells('B1:C1'); mainSheet.mergeCells('D1:E1'); mainSheet.mergeCells('F1:G1');
@@ -432,10 +417,10 @@ declare var ExcelJS: any;
       mainSheet.mergeCells('T1:X1');
 
       ['B1', 'D1', 'F1'].forEach((cell, index) => {
-        mainSheet.getCell(cell).style = styles[['neua-fa-header', 'qc-ww-header', 'qc-end-header'][index]]!;
+        mainSheet.getCell(cell).style = styles[['neua-fa-header', 'qc-ww-header', 'qc-end-header'][index]];
       });
       ['B2', 'D2', 'F2', 'C2', 'E2', 'G2'].forEach((cell, index) => {
-          mainSheet.getCell(cell).style = styles[['neua-fa-header', 'qc-ww-header', 'qc-end-header', 'neua-fa-header', 'qc-ww-header', 'qc-end-header'][index]]!;
+          mainSheet.getCell(cell).style = styles[['neua-fa-header', 'qc-ww-header', 'qc-end-header', 'neua-fa-header', 'qc-ww-header', 'qc-end-header'][index]];
       });
 
 
@@ -491,48 +476,48 @@ declare var ExcelJS: any;
         
           // --- Styling ---
           // Merged Floor Cell
-          mainSheet.getCell(`A${startRowNum}`).style = styles.default!;
+          mainSheet.getCell(`A${startRowNum}`).style = styles.default;
 
           // Style Labels
-          planRow.getCell(8).style = styles['row-label']!;
-          actualRow.getCell(8).style = styles['row-label']!;
+          planRow.getCell(8).style = styles['row-label'];
+          actualRow.getCell(8).style = styles['row-label'];
         
           // Color task cells (using the lighter 'actual' color for all totals)
-          mainSheet.getCell(`B${startRowNum}`).style = styles['neua-fa-actual']!; // neua-fa total (merged)
-          mainSheet.getCell(`C${startRowNum}`).style = styles['neua-fa-actual']!; // neua-fa sent (merged)
-          mainSheet.getCell(`D${startRowNum}`).style = styles['qc-ww-actual']!;   // qc-ww total (merged)
-          mainSheet.getCell(`E${startRowNum}`).style = styles['qc-ww-actual']!;   // qc-ww sent (merged)
-          mainSheet.getCell(`F${startRowNum}`).style = styles['qc-end-actual']!;   // qc-end total (merged)
-          mainSheet.getCell(`G${startRowNum}`).style = styles['qc-end-actual']!;   // qc-end sent (merged)
+          mainSheet.getCell(`B${startRowNum}`).style = styles['neua-fa-actual']; // neua-fa total (merged)
+          mainSheet.getCell(`C${startRowNum}`).style = styles['neua-fa-actual']; // neua-fa sent (merged)
+          mainSheet.getCell(`D${startRowNum}`).style = styles['qc-ww-actual'];   // qc-ww total (merged)
+          mainSheet.getCell(`E${startRowNum}`).style = styles['qc-ww-actual'];   // qc-ww sent (merged)
+          mainSheet.getCell(`F${startRowNum}`).style = styles['qc-end-actual'];   // qc-end total (merged)
+          mainSheet.getCell(`G${startRowNum}`).style = styles['qc-end-actual'];   // qc-end sent (merged)
 
           // Style Weekly Data Cells
           for(let week = 0; week < WEEKS; week++) {
               const col = 9 + week;
               const planTask = state[floor][week].plan.task;
-              if(planTask) planRow.getCell(col).style = styles[`${planTask}-plan`]!;
-              else planRow.getCell(col).style = styles.default!;
+              if(planTask) planRow.getCell(col).style = styles[`${planTask}-plan`];
+              else planRow.getCell(col).style = styles.default;
 
               const actualTask = state[floor][week].actual.task;
-              if(actualTask) actualRow.getCell(col).style = styles[`${actualTask}-actual`]!;
-              else actualRow.getCell(col).style = styles.default!;
+              if(actualTask) actualRow.getCell(col).style = styles[`${actualTask}-actual`];
+              else actualRow.getCell(col).style = styles.default;
           }
       });
 
       // Footer Row
       const summaryData = getSummaryData();
-      const footerValues: (string|number)[] = ['รวม'];
+      const footerValues = ['รวม'];
       ['neua-fa', 'qc-ww', 'qc-end'].forEach(task => {
-          const totalPlan = summaryData[task as Task].plan.reduce((a, b) => a + b, 0);
-          const totalActual = summaryData[task as Task].actual.reduce((a, b) => a + b, 0);
+          const totalPlan = summaryData[task].plan.reduce((a, b) => a + b, 0);
+          const totalActual = summaryData[task].actual.reduce((a, b) => a + b, 0);
           footerValues.push(totalPlan > 0 ? totalPlan.toString() : '');
           footerValues.push(totalActual > 0 ? totalActual.toString() : '');
       });
       footerValues.push(''); // for Plan/Actual label column
       const footerRow = mainSheet.addRow(footerValues);
-      footerRow.eachCell(c => c.style = styles.footer!);
+      footerRow.eachCell(c => c.style = styles.footer);
 
       // --- SUMMARY SHEETS ---
-      const summaryTasks: {id: Task, name: string}[] = [
+      const summaryTasks = [
           {id: 'neua-fa', name: 'สรุป QC เหนือฝ้า'},
           {id: 'qc-ww', name: 'สรุป QC WW'},
           {id: 'qc-end', name: 'สรุป QC End'},
@@ -543,14 +528,14 @@ declare var ExcelJS: any;
           sheet.columns = [{ width: 12 }, ...Array(WEEKS).fill({ width: 10 })];
         
           const headerRow = sheet.addRow([taskInfo.name]);
-          headerRow.getCell(1).style = styles[`${taskInfo.id}-header`]!;
-          headerRow.getCell(1).font = { ...styles[`${taskInfo.id}-header`]!.font, size: 14 };
+          headerRow.getCell(1).style = styles[`${taskInfo.id}-header`];
+          headerRow.getCell(1).font = { ...styles[`${taskInfo.id}-header`].font, size: 14 };
           sheet.mergeCells(1, 1, 1, WEEKS + 1);
         
           const weekHeaderRow = sheet.addRow(['', ...WEEK_HEADERS]);
-          weekHeaderRow.getCell(1).style = styles['row-label']!;
+          weekHeaderRow.getCell(1).style = styles['row-label'];
           weekHeaderRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-              if (colNumber > 1) cell.style = styles.header!;
+              if (colNumber > 1) cell.style = styles.header;
           });
 
           const rows = [
@@ -566,9 +551,9 @@ declare var ExcelJS: any;
 
           rows.forEach(rowData => {
               const row = sheet.addRow([rowData.label]);
-              row.getCell(1).style = styles['row-label']!;
+              row.getCell(1).style = styles['row-label'];
               for(let week = 0; week < WEEKS; week++) {
-                  let value: number | string = 0;
+                  let value = 0;
                   let style = styles.default;
                   if(rowData.type === 'plan') {
                       const weeklyValue = summaryData[taskInfo.id].plan[week];
@@ -596,7 +581,7 @@ declare var ExcelJS: any;
                   const cell = row.getCell(week + 2);
                   if (value !== 0 && value !== '') cell.value = value;
                   else cell.value = null;
-                  cell.style = style!;
+                  cell.style = style;
               }
           });
       });
