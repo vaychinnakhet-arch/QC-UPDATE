@@ -7,17 +7,17 @@
   /* Neua Fa */
   --color-neua-fa-header: #f79646; /* Orange */
   --color-neua-fa-plan-bg: #fddca9; /* Darker Pale Orange */
-  --color-neua-fa-data: #feefd8;   /* Pale Yellow/Orange */
+  --color-neua-fa-data: #fff8ed;   /* Lighter Pale Yellow/Orange for contrast */
 
   /* QC WW */
   --color-qc-ww-header: #4f81bd; /* Blue */
   --color-qc-ww-plan-bg: #c9d8e8; /* Darker Pale Blue */
-  --color-qc-ww-data: #dce6f1;   /* Pale Blue */
+  --color-qc-ww-data: #eef3f8;   /* Lighter Pale Blue for contrast */
 
   /* QC End */
   --color-qc-end-header: #9bbb59; /* Green */
   --color-qc-end-plan-bg: #e2eacb; /* Darker Pale Green */
-  --color-qc-end-data: #ebf1de;   /* Pale Green */
+  --color-qc-end-data: #f6f9f2;   /* Lighter Pale Green for contrast */
 
   /* General UI */
   --color-future-actual-bg: #f5f5f5;
@@ -155,13 +155,13 @@ thead .header-main .th-qc-end, thead .header-sub .th-qc-end { background-color: 
 
 /* Color coding for Floor Totals */
 tbody td[data-task-total="neua-fa"],
-tbody td[data-task-sent="neua-fa"] { background-color: var(--color-neua-fa-data) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+tbody td[data-task-sent="neua-fa"] { background-color: var(--color-neua-fa-plan-bg) !important; color: var(--color-text-dark) !important; font-weight: bold; }
 
 tbody td[data-task-total="qc-ww"],
-tbody td[data-task-sent="qc-ww"] { background-color: var(--color-qc-ww-data) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+tbody td[data-task-sent="qc-ww"] { background-color: var(--color-qc-ww-plan-bg) !important; color: var(--color-text-dark) !important; font-weight: bold; }
 
 tbody td[data-task-total="qc-end"],
-tbody td[data-task-sent="qc-end"] { background-color: var(--color-qc-end-data) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+tbody td[data-task-sent="qc-end"] { background-color: var(--color-qc-end-plan-bg) !important; color: var(--color-text-dark) !important; font-weight: bold; }
 
 /* Sticky Columns */
 .static-col-1 {

@@ -497,13 +497,13 @@ declare var ExcelJS: any;
           planRow.getCell(8).style = styles['row-label']!;
           actualRow.getCell(8).style = styles['row-label']!;
         
-          // Color task cells (using the lighter 'actual' color for all totals)
-          mainSheet.getCell(`B${startRowNum}`).style = styles['neua-fa-actual']!; // neua-fa total (merged)
-          mainSheet.getCell(`C${startRowNum}`).style = styles['neua-fa-actual']!; // neua-fa sent (merged)
-          mainSheet.getCell(`D${startRowNum}`).style = styles['qc-ww-actual']!;   // qc-ww total (merged)
-          mainSheet.getCell(`E${startRowNum}`).style = styles['qc-ww-actual']!;   // qc-ww sent (merged)
-          mainSheet.getCell(`F${startRowNum}`).style = styles['qc-end-actual']!;   // qc-end total (merged)
-          mainSheet.getCell(`G${startRowNum}`).style = styles['qc-end-actual']!;   // qc-end sent (merged)
+          // Color task cells (using the darker 'plan' color for all totals for consistency with web view)
+          mainSheet.getCell(`B${startRowNum}`).style = styles['neua-fa-plan']!; // neua-fa total (merged)
+          mainSheet.getCell(`C${startRowNum}`).style = styles['neua-fa-plan']!; // neua-fa sent (merged)
+          mainSheet.getCell(`D${startRowNum}`).style = styles['qc-ww-plan']!;   // qc-ww total (merged)
+          mainSheet.getCell(`E${startRowNum}`).style = styles['qc-ww-plan']!;   // qc-ww sent (merged)
+          mainSheet.getCell(`F${startRowNum}`).style = styles['qc-end-plan']!;   // qc-end total (merged)
+          mainSheet.getCell(`G${startRowNum}`).style = styles['qc-end-plan']!;   // qc-end sent (merged)
 
           // Style Weekly Data Cells
           for(let week = 0; week < WEEKS; week++) {
