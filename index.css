@@ -158,4 +158,186 @@ tbody td[data-task-total="neua-fa"],
 tbody td[data-task-sent="neua-fa"] { background-color: var(--color-neua-fa-data) !important; color: var(--color-text-dark) !important; font-weight: bold; }
 
 tbody td[data-task-total="qc-ww"],
-tbody td[data-task-sent="qc-ww"] { background-color: var(--color-qc-ww-data) !importa...
+tbody td[data-task-sent="qc-ww"] { background-color: var(--color-qc-ww-data) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+
+tbody td[data-task-total="qc-end"],
+tbody td[data-task-sent="qc-end"] { background-color: var(--color-qc-end-data) !important; color: var(--color-text-dark) !important; font-weight: bold; }
+
+/* Sticky Columns */
+.static-col-1 {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: #f8f9fa; /* Light grey to distinguish */
+}
+
+.static-col-2 {
+    position: sticky;
+    left: 48.5px; /* Adjust based on width of first column */
+    z-index: 1;
+    background-color: #f8f9fa; /* Light grey to distinguish */
+}
+
+tbody tr:nth-child(odd) .static-col-1,
+tbody tr:nth-child(odd) .static-col-2 {
+    background-color: #f1f3f5;
+}
+
+.row-label {
+    text-align: left;
+    padding-left: 10px;
+    background-color: #e9ecef;
+    font-weight: bold;
+}
+
+/* Editable Cells */
+.editable-cell {
+  cursor: pointer;
+  transition: background-color 0.2s;
+  min-width: 60px;
+}
+.editable-cell:hover {
+  background-color: #e9ecef;
+}
+
+.bg-neua-fa-plan { background-color: var(--color-neua-fa-plan-bg); }
+.bg-neua-fa-actual { background-color: var(--color-neua-fa-data); }
+
+.bg-qc-ww-plan { background-color: var(--color-qc-ww-plan-bg); }
+.bg-qc-ww-actual { background-color: var(--color-qc-ww-data); }
+
+.bg-qc-end-plan { background-color: var(--color-qc-end-plan-bg); }
+.bg-qc-end-actual { background-color: var(--color-qc-end-data); }
+
+.future-actual {
+    background-color: var(--color-future-actual-bg);
+    color: var(--color-future-actual-text);
+}
+
+/* Popover Styles */
+.popover {
+  position: absolute;
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  padding: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.popover-input {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1em;
+  width: 100%;
+  box-sizing: border-box;
+}
+.popover-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.popover-button {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  background-color: #f8f8f8;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.9em;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+.popover-button:hover {
+  background-color: #e9ecef;
+  border-color: #ccc;
+}
+
+/* Task-specific button colors */
+.popover-button[data-task="neua-fa"] {
+    background-color: var(--color-neua-fa-data);
+    border: 1px solid var(--color-neua-fa-plan-bg);
+    color: var(--color-text-dark);
+    font-weight: bold;
+}
+.popover-button[data-task="neua-fa"]:hover {
+    background-color: var(--color-neua-fa-plan-bg);
+}
+
+.popover-button[data-task="qc-ww"] {
+    background-color: var(--color-qc-ww-data);
+    border: 1px solid var(--color-qc-ww-plan-bg);
+    color: var(--color-text-dark);
+    font-weight: bold;
+}
+.popover-button[data-task="qc-ww"]:hover {
+    background-color: var(--color-qc-ww-plan-bg);
+}
+
+.popover-button[data-task="qc-end"] {
+    background-color: var(--color-qc-end-data);
+    border: 1px solid var(--color-qc-end-plan-bg);
+    color: var(--color-text-dark);
+    font-weight: bold;
+}
+.popover-button[data-task="qc-end"]:hover {
+    background-color: var(--color-qc-end-plan-bg);
+}
+
+.popover-controls {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.popover-controls button {
+  flex-grow: 1;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #ccc;
+}
+#popover-clear {
+  background-color: #fff0f1;
+  color: #d94854;
+  border-color: #f7b9c0;
+}
+#popover-cancel {
+  background-color: #f8f9fa;
+}
+
+
+/* Main Table Footer */
+#main-schedule-table tfoot {
+  font-weight: bold;
+}
+#main-schedule-table tfoot th,
+#main-schedule-table tfoot td {
+  background-color: #fffde7;
+}
+
+#main-schedule-table tfoot td {
+  color: #333;
+}
+
+
+/* Summary Tables */
+.summary-tables-container {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.summary-table {
+  min-width: 1200px;
+}
+.summary-table thead tr:first-child th {
+  font-size: 1.1em;
+  padding: 12px;
+}
+
+/* Color coding for Summary Table Headers */
+#summary-neua-fa thead tr:first-child th { background-color: var(--color-neua-fa-header); color: var(--color-text-dark); }
+#summary-qc-ww thead tr:first-child th { background-color: var(--color-qc-ww-header); color: var(--color-text-light); }
+#summary-qc-end thead tr:first-child th { background-color: var(--color-qc-end-header); color: var(--color-text-dark); }
