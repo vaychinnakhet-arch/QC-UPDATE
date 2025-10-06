@@ -320,6 +320,21 @@ tbody tr:nth-child(odd) .static-col-2 {
   color: #333;
 }
 
+#main-schedule-table tfoot #total-neua-fa-plan,
+#main-schedule-table tfoot #total-neua-fa-sent {
+    background-color: var(--color-neua-fa-plan-bg);
+}
+
+#main-schedule-table tfoot #total-qc-ww-plan,
+#main-schedule-table tfoot #total-qc-ww-sent {
+    background-color: var(--color-qc-ww-plan-bg);
+}
+
+#main-schedule-table tfoot #total-qc-end-plan,
+#main-schedule-table tfoot #total-qc-end-sent {
+    background-color: var(--color-qc-end-plan-bg);
+}
+
 
 /* Summary Tables */
 .summary-tables-container {

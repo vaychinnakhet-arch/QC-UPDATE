@@ -535,7 +535,16 @@ declare var ExcelJS: any;
       });
       footerValues.push(''); // for Plan/Actual label column
       const footerRow = mainSheet.addRow(footerValues);
-      footerRow.eachCell(c => c.style = styles.footer!);
+      
+      // Style footer cells individually
+      footerRow.getCell(1).style = styles.footer!; // 'รวม'
+      footerRow.getCell(2).style = styles['neua-fa-plan']!;
+      footerRow.getCell(3).style = styles['neua-fa-plan']!;
+      footerRow.getCell(4).style = styles['qc-ww-plan']!;
+      footerRow.getCell(5).style = styles['qc-ww-plan']!;
+      footerRow.getCell(6).style = styles['qc-end-plan']!;
+      footerRow.getCell(7).style = styles['qc-end-plan']!;
+      footerRow.getCell(8).style = styles.footer!; // Empty cell for Plan/Actual label
 
       // --- SUMMARY SHEETS ---
       const summaryTasks: {id: Task, name: string}[] = [
