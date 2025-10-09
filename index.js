@@ -19,6 +19,9 @@
   const popoverCancel = document.getElementById('popover-cancel');
   const statusIndicator = document.getElementById('status-indicator');
   const exportButton = document.getElementById('export-excel-btn');
+  const exportJsonButton = document.getElementById('export-json-btn');
+  const importJsonButton = document.getElementById('import-json-btn');
+  const importJsonInput = document.getElementById('import-json-input');
 
   // --- STATE ---
   let state = {};
@@ -140,6 +143,9 @@
       }
     });
     exportButton.addEventListener('click', exportToExcel);
+    exportJsonButton.addEventListener('click', exportStateToJson);
+    importJsonButton.addEventListener('click', () => importJsonInput.click());
+    importJsonInput.addEventListener('change', importStateFromJson);
   }
 
 
@@ -399,6 +405,68 @@
               }, 3000);
           }
       }
+  }
+
+  // --- DATA IMPORT/EXPORT ---
+  function exportStateToJson() {
+    try {
+      updateStatus('Exporting JSON...', 'orange', false);
+      const jsonString = JSON.stringify(state, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'schedule-data.json';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      updateStatus('JSON Export Successful!', 'green');
+    } catch (error) {
+      console.error('Failed to export state to JSON:', error);
+      updateStatus('JSON Export Failed!', 'red');
+    }
+  }
+
+  function importStateFromJson(event) {
+    const input = event.target;
+    if (!input.files || input.files.length === 0) {
+      return;
+    }
+    const file = input.files[0];
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result;
+        if (typeof text !== 'string') {
+          throw new Error("File could not be read.");
+        }
+        const importedState = JSON.parse(text);
+
+        // Basic validation: Check if the imported object has keys that are in FLOORS
+        const firstFloorKey = FLOORS[0].toString();
+        if (!importedState[firstFloorKey] || !importedState[firstFloorKey]['0']) {
+           throw new Error('Invalid or corrupted data file.');
+        }
+
+        state = importedState;
+        saveState();
+        renderAll();
+        updateStatus('Import Successful!', 'green');
+      } catch (error) {
+        console.error('Failed to import state from JSON:', error);
+        updateStatus(`Import Failed: ${error.message}`, 'red', false);
+      } finally {
+          // Reset the input value to allow importing the same file again
+          input.value = '';
+      }
+    };
+
+    reader.onerror = () => {
+       updateStatus('Failed to read file!', 'red');
+       input.value = '';
+    };
+    
+    reader.readAsText(file);
   }
 
   // --- EXCEL EXPORT ---

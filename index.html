@@ -25,7 +25,12 @@
         <p>VAY CHINNAKHET</p>
       </div>
       <div class="header-actions">
-        <button id="export-excel-btn" class="export-button">Export to Excel</button>
+        <div class="action-buttons">
+          <button id="import-json-btn" class="action-button import">Import JSON</button>
+          <input type="file" id="import-json-input" accept=".json" style="display: none;">
+          <button id="export-json-btn" class="action-button export-json">Export JSON</button>
+          <button id="export-excel-btn" class="action-button export-excel">Export to Excel</button>
+        </div>
         <div class="status-container">
             Status: <span id="status-indicator"></span>
         </div>

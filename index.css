@@ -86,7 +86,7 @@ header {
     flex-direction: column;
     align-items: flex-end;
     gap: 8px;
-    min-width: 150px;
+    min-width: 350px;
 }
   
 .status-container {
@@ -98,8 +98,12 @@ header {
   font-weight: bold;
 }
 
-.export-button {
-    background-color: #43a047; /* Green */
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.action-button {
     color: white;
     border: none;
     padding: 8px 12px;
@@ -110,9 +114,15 @@ header {
     font-weight: bold;
     transition: background-color 0.2s ease;
 }
-.export-button:hover {
-    background-color: #388e3c; /* Darker Green */
-}
+
+.action-button.import { background-color: #1976d2; } /* Blue */
+.action-button.import:hover { background-color: #1565c0; }
+
+.action-button.export-json { background-color: #f57c00; } /* Orange */
+.action-button.export-json:hover { background-color: #ef6c00; }
+
+.action-button.export-excel { background-color: #43a047; } /* Green */
+.action-button.export-excel:hover { background-color: #388e3c; }
 
 
 /* Table Styles */
