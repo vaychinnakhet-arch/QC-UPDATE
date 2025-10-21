@@ -13,8 +13,8 @@
 
   // --- SUPABASE CONSTANTS (USER-CONFIGURABLE) ---
   // IMPORTANT: Replace with your Supabase project URL and anon key.
-  const SUPABASE_URL = 'https://your-project-id.supabase.co'; // <-- REPLACE
-  const SUPABASE_KEY = 'your-supabase-anon-key'; // <-- REPLACE
+  const SUPABASE_URL = 'https://qunnmzlrsfsgaztqiexf.supabase.co'; // <-- REPLACE
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1bm5temxyc2ZzZ2F6dHFpZXhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEwMzQ3NjgsImV4cCI6MjA3NjYxMDc2OH0.6uUMhDqaq1fGia91r5vTp990amvsiZ_6_eYFJlvgk3c'; // <-- REPLACE
   const SUPABASE_TABLE_ID = 'main_schedule';
 
   // --- Supabase Client ---
