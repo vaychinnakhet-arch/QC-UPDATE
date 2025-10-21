@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-// Let TypeScript know that ExcelJS is available on the global scope
+// Let TypeScript know that these libraries are available on the global scope
 declare var ExcelJS: any;
+declare var html2canvas: any;
+declare var supabase: any;
 
 // FIX: Wrapped the code in an IIFE to prevent global scope pollution.
 (() => {
@@ -26,6 +28,16 @@ declare var ExcelJS: any;
   const WEEK_HEADERS = ["15-21/ก.ย.", "22-28/ก.ย.", "29-5/ต.ค.", "6-12/ต.ค.", "13-19/ต.ค.", "20-26/ต.ค.", "27-2/พ.ย.", "3-9/พ.ย.", "10-16/พ.ย.", "17-23/พ.ย.", "24-30/พ.ย.", "1-7/ธ.ค.", "8-14/ธ.ค.", "15-21/ธ.ค.", "22-28/ธ.ค.", "29-30/ธ.ค."];
   const LOCAL_STORAGE_KEY = 'schedule-app-state';
 
+  // --- SUPABASE CONSTANTS (USER-CONFIGURABLE) ---
+  // IMPORTANT: Replace with your Supabase project URL and anon key.
+  const SUPABASE_URL = 'https://your-project-id.supabase.co'; // <-- REPLACE
+  const SUPABASE_KEY = 'your-supabase-anon-key'; // <-- REPLACE
+  const SUPABASE_TABLE_ID = 'main_schedule';
+
+  // --- Supabase Client ---
+  const supabaseClient = SUPABASE_URL.includes('your-project-id') ? null : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+
   // --- DOM ELEMENTS ---
   const mainTableBody = document.querySelector('#main-schedule-table tbody') as HTMLTableSectionElement;
   const popover = document.getElementById('popover') as HTMLDivElement;
@@ -37,26 +49,67 @@ declare var ExcelJS: any;
   const exportJsonButton = document.getElementById('export-json-btn') as HTMLButtonElement;
   const importJsonButton = document.getElementById('import-json-btn') as HTMLButtonElement;
   const importJsonInput = document.getElementById('import-json-input') as HTMLInputElement;
+  const captureButton = document.getElementById('capture-btn') as HTMLButtonElement;
 
   // --- STATE ---
   let state: AppState = {};
   let activeCell: HTMLElement | null = null;
 
   // --- INITIALIZATION ---
-  document.addEventListener('DOMContentLoaded', () => {
-    initState();
+  document.addEventListener('DOMContentLoaded', async () => {
+    await initState();
     createMainTable();
     createSummaryTables();
     addEventListeners();
     renderAll();
-    updateStatus('Ready', 'green');
   });
 
-  function initState() {
+  async function initState() {
+    // If Supabase is not configured, show a warning and load from local storage
+    if (!supabaseClient) {
+      console.warn('Supabase not configured. Loading from local storage.');
+      const warningEl = document.getElementById('supabase-warning');
+      if (warningEl) warningEl.style.display = 'block';
+      updateStatus('Supabase not configured', 'orange', false);
+      loadFromLocalStorage();
+      return;
+    }
+
+    // Try loading from Supabase first
+    try {
+      updateStatus('Loading from cloud...', 'orange', false);
+      const { data, error } = await supabaseClient
+          .from('schedules')
+          .select('data')
+          .eq('id', SUPABASE_TABLE_ID)
+          .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116: "The result contains 0 rows"
+          throw error;
+      }
+
+      if (data) {
+          state = data.data;
+          updateStatus('Loaded from cloud', 'green');
+          return;
+      }
+    } catch (error) {
+      console.error('Failed to load from Supabase:', error);
+      updateStatus('Cloud load failed', 'red', false);
+    }
+    
+    // Fallback to local storage if Supabase fails or has no data
+    console.log('No cloud data found. Falling back to local storage.');
+    loadFromLocalStorage();
+  }
+
+  function loadFromLocalStorage() {
     const savedState = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (savedState) {
       state = JSON.parse(savedState);
+      updateStatus('Loaded locally', 'green');
     } else {
+      // Initialize fresh state if nothing is saved
       state = {};
       for (const floor of FLOORS) {
         state[floor] = {};
@@ -67,12 +120,35 @@ declare var ExcelJS: any;
           };
         }
       }
+      updateStatus('Ready', 'green');
     }
   }
 
-  function saveState() {
+  async function saveState() {
+    // Always save to local storage for offline access and speed
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
-    updateStatus('Saved', 'green');
+    updateStatus('Saved locally', 'green');
+    
+    // If Supabase is not configured, stop here
+    if (!supabaseClient) {
+      return;
+    }
+
+    // Attempt to save to Supabase
+    try {
+      updateStatus('Saving to cloud...', 'orange', false);
+      const { error } = await supabaseClient
+        .from('schedules')
+        .upsert({ id: SUPABASE_TABLE_ID, data: state });
+      
+      if (error) {
+          throw error;
+      }
+      updateStatus('Saved to cloud', 'green');
+    } catch (error) {
+      console.error('Failed to save to Supabase:', error);
+      updateStatus('Cloud save failed!', 'red');
+    }
   }
 
   // --- TABLE CREATION ---
@@ -161,6 +237,7 @@ declare var ExcelJS: any;
     exportJsonButton.addEventListener('click', exportStateToJson);
     importJsonButton.addEventListener('click', () => importJsonInput.click());
     importJsonInput.addEventListener('change', importStateFromJson);
+    captureButton.addEventListener('click', captureImage);
   }
 
 
@@ -201,7 +278,7 @@ declare var ExcelJS: any;
     }
 
     renderAll();
-    saveState();
+    saveState(); // This is now async, but we don't need to wait for it.
     hidePopover();
   }
 
@@ -420,6 +497,55 @@ declare var ExcelJS: any;
               }, 3000);
           }
       }
+  }
+
+  // --- IMAGE CAPTURE ---
+  async function captureImage() {
+    // The element we want to capture is the whole container.
+    const captureElement = document.querySelector('.container') as HTMLElement;
+    // The elements inside we want to hide during capture.
+    const actionsElement = document.querySelector('.header-actions') as HTMLElement;
+
+    if (!captureElement || !html2canvas) {
+        console.error('Capture element or html2canvas not found');
+        return;
+    }
+
+    updateStatus('Capturing...', 'orange', false);
+
+    // Store original style to restore it later
+    const originalActionsDisplay = actionsElement.style.display;
+    
+    try {
+        // Hide the action buttons so they don't appear in the screenshot
+        actionsElement.style.display = 'none';
+
+        const canvas = await html2canvas(captureElement, {
+            scale: 2, // Higher scale for better quality
+            backgroundColor: '#ffffff', // Set a white background
+            useCORS: true, 
+            // These options help capture the entire element, not just the visible part
+            width: captureElement.scrollWidth,
+            height: captureElement.scrollHeight,
+            windowWidth: document.documentElement.offsetWidth,
+            windowHeight: document.documentElement.offsetHeight,
+        });
+
+        // Create a link to download the image
+        const link = document.createElement('a');
+        link.download = 'schedule-capture.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+
+        updateStatus('Capture successful!', 'green');
+
+    } catch (error) {
+        console.error('Failed to capture image:', error);
+        updateStatus('Capture failed!', 'red');
+    } finally {
+        // IMPORTANT: Always restore the original style, even if capture fails
+        actionsElement.style.display = originalActionsDisplay;
+    }
   }
 
   // --- DATA IMPORT/EXPORT ---

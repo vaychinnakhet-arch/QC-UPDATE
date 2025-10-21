@@ -9,8 +9,10 @@
   <link rel="preconnect" href="httpshttps://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
-  <!-- ExcelJS library for export -->
+  <!-- Third-party libraries -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
@@ -25,7 +27,11 @@
         <p>VAY CHINNAKHET</p>
       </div>
       <div class="header-actions">
+        <div id="supabase-warning" style="display: none; color: orange; font-size: 12px; text-align: right; margin-bottom: 4px;">
+          Supabase not configured. Data is local only.
+        </div>
         <div class="action-buttons">
+          <button id="capture-btn" class="action-button capture">เเคปเจอร์ภาพ</button>
           <button id="import-json-btn" class="action-button import">Import JSON</button>
           <input type="file" id="import-json-input" accept=".json" style="display: none;">
           <button id="export-json-btn" class="action-button export-json">Export JSON</button>

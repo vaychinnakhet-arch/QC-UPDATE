@@ -115,6 +115,9 @@ header {
     transition: background-color 0.2s ease;
 }
 
+.action-button.capture { background-color: #6a1b9a; } /* Purple */
+.action-button.capture:hover { background-color: #4a148c; }
+
 .action-button.import { background-color: #1976d2; } /* Blue */
 .action-button.import:hover { background-color: #1565c0; }
 
