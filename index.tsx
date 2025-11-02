@@ -12,14 +12,16 @@ declare var supabase: any;
 (() => {
   // --- TYPE DEFINITIONS ---
   type Task = 'neua-fa' | 'qc-ww' | 'qc-end';
-  type CellData = {
+  type PlanCellData = {
     value: number | null;
     task: Task | null;
   };
+  type ActualCellData = Partial<Record<Task, number>>;
+
   type RowType = 'plan' | 'actual';
   type AppState = Record<string, Record<string, {
-    plan: CellData;
-    actual: CellData;
+    plan: PlanCellData;
+    actual: ActualCellData;
   }>>;
 
   // --- CONSTANTS ---
@@ -64,6 +66,29 @@ declare var supabase: any;
     renderAll();
   });
 
+  function migrateState(data: any): AppState {
+    // Migration logic for old data structure
+    for (const floor of FLOORS) {
+      if (!data[floor]) continue;
+      for (let week = 0; week < WEEKS; week++) {
+        if (!data[floor][week]) continue;
+        const actualCell = data[floor][week].actual as any;
+        // Check for old format: { task: '...', value: ... }
+        if (actualCell && actualCell.task) { 
+          const { task, value } = actualCell;
+          data[floor][week].actual = {};
+          if (task && value) {
+            data[floor][week].actual[task] = value;
+          }
+        } else if (!actualCell || typeof actualCell !== 'object') { 
+          // Ensure it's an object if it doesn't exist or is wrong type
+          data[floor][week].actual = {};
+        }
+      }
+    }
+    return data;
+  }
+
   async function initState() {
     // If Supabase is not configured, show a warning and load from local storage
     if (!supabaseClient) {
@@ -88,8 +113,8 @@ declare var supabase: any;
           throw error;
       }
 
-      if (data) {
-          state = data.data;
+      if (data && data.data) {
+          state = migrateState(data.data);
           updateStatus('Loaded from cloud', 'green');
           return;
       }
@@ -106,7 +131,8 @@ declare var supabase: any;
   function loadFromLocalStorage() {
     const savedState = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (savedState) {
-      state = JSON.parse(savedState);
+      const parsedState = JSON.parse(savedState);
+      state = migrateState(parsedState);
       updateStatus('Loaded locally', 'green');
     } else {
       // Initialize fresh state if nothing is saved
@@ -116,7 +142,7 @@ declare var supabase: any;
         for (let i = 0; i < WEEKS; i++) {
           state[floor][i] = {
             plan: { value: null, task: null },
-            actual: { value: null, task: null },
+            actual: {},
           };
         }
       }
@@ -214,6 +240,9 @@ declare var supabase: any;
       const target = e.target as HTMLElement;
       if (target.classList.contains('editable-cell')) {
         showPopover(target);
+      } else if (target.parentElement?.classList.contains('editable-cell')) {
+        // Handle clicks on inner divs of split cells
+        showPopover(target.parentElement);
       }
     });
 
@@ -247,8 +276,13 @@ declare var supabase: any;
     const { floor, week, type } = cell.dataset;
     if (!floor || !week || !type) return;
 
-    const cellData = state[floor][week][type as RowType];
-    popoverInput.value = cellData.value?.toString() || '';
+    if (type as RowType === 'plan') {
+      const cellData = state[floor][week].plan;
+      popoverInput.value = cellData.value?.toString() || '';
+    } else {
+      // For actual cells, don't pre-fill. User types a value and picks a task to add/update.
+      popoverInput.value = '';
+    }
   
     const rect = cell.getBoundingClientRect();
     popover.style.display = 'block';
@@ -267,18 +301,35 @@ declare var supabase: any;
     if (!activeCell) return;
     const { floor, week, type } = activeCell.dataset;
     if (!floor || !week || !type) return;
+    const rowType = type as RowType;
 
-    // If task is null, it's a 'clear' operation. Both value and task should be null.
+    // If task is null, it's a 'clear' operation.
     if (task === null) {
-      state[floor][week][type as RowType] = { value: null, task: null };
+        if (rowType === 'plan') {
+            state[floor][week].plan = { value: null, task: null };
+        } else {
+            state[floor][week].actual = {}; // Clear all actual tasks
+        }
     } else {
-      // Otherwise, it's a task assignment. Read the value from the input.
-      const value = popoverInput.value ? parseInt(popoverInput.value, 10) : null;
-      state[floor][week][type as RowType] = { value, task };
+        const value = popoverInput.value ? parseInt(popoverInput.value, 10) : null;
+        if (rowType === 'plan') {
+            state[floor][week].plan = { value, task };
+        } else { // 'actual'
+            if (!state[floor][week].actual) {
+                state[floor][week].actual = {};
+            }
+            if (value === null || value <= 0) {
+                // If value is empty or zero, remove that task
+                delete state[floor][week].actual[task];
+            } else {
+                // Add or update the task with the new value
+                state[floor][week].actual[task] = value;
+            }
+        }
     }
 
     renderAll();
-    saveState(); // This is now async, but we don't need to wait for it.
+    saveState();
     hidePopover();
   }
 
@@ -292,7 +343,6 @@ declare var supabase: any;
     for (const floor of FLOORS) {
       for (let week = 0; week < WEEKS; week++) {
         const planCellData = state[floor][week].plan;
-        const actualCellData = state[floor][week].actual;
 
         // Render Plan Cell
         const planCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-week="${week}"][data-type="plan"]`) as HTMLElement;
@@ -304,12 +354,34 @@ declare var supabase: any;
       
         // Render Actual Cell
         const actualCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-week="${week}"][data-type="actual"]`) as HTMLElement;
-        actualCell.textContent = actualCellData.value?.toString() || '';
-        actualCell.className = 'editable-cell'; // Reset classes
+        const actualCellData = state[floor][week].actual;
+        const tasks = actualCellData ? (Object.keys(actualCellData) as Task[]).filter(t => actualCellData[t]) : [];
 
-        // Color the actual cell based on its own task.
-        if (actualCellData.task) {
-          actualCell.classList.add(`bg-${actualCellData.task}-actual`);
+        // Cleanup cell before rendering
+        actualCell.innerHTML = '';
+        actualCell.className = 'editable-cell';
+        actualCell.style.padding = '';
+
+        if (tasks.length === 0) {
+            // Cell is empty, do nothing
+        } else if (tasks.length === 1) {
+            const task = tasks[0];
+            actualCell.textContent = actualCellData[task]?.toString() || '';
+            actualCell.classList.add(`bg-${task}-actual`);
+        } else { // 2 or more tasks
+            actualCell.style.padding = '0';
+            const container = document.createElement('div');
+            container.className = 'actual-cell-split-container';
+
+            // Display all tasks
+            tasks.forEach(task => {
+                const value = actualCellData[task];
+                const splitDiv = document.createElement('div');
+                splitDiv.className = `actual-cell-split bg-${task}-actual`;
+                splitDiv.textContent = value?.toString() || '';
+                container.appendChild(splitDiv);
+            });
+            actualCell.appendChild(container);
         }
       }
     }
@@ -329,8 +401,13 @@ declare var supabase: any;
                   floorTotals[planData.task].plan += planData.value;
               }
               const actualData = state[floor][week].actual;
-              if (actualData.task && actualData.value) {
-                  floorTotals[actualData.task].actual += actualData.value;
+              if (actualData) {
+                  for (const task of Object.keys(actualData) as Task[]) {
+                      const value = actualData[task];
+                      if (value) {
+                          floorTotals[task].actual += value;
+                      }
+                  }
               }
           }
         
@@ -364,7 +441,7 @@ declare var supabase: any;
 
 
   function getSummaryData() {
-      const summaryData: Record<Task, Record<RowType, number[]>> = {
+      const summaryData: Record<Task, { plan: number[], actual: number[] }> = {
         'neua-fa': { plan: Array(WEEKS).fill(0), actual: Array(WEEKS).fill(0) },
         'qc-ww': { plan: Array(WEEKS).fill(0), actual: Array(WEEKS).fill(0) },
         'qc-end': { plan: Array(WEEKS).fill(0), actual: Array(WEEKS).fill(0) },
@@ -373,10 +450,19 @@ declare var supabase: any;
       // Calculate weekly totals from state
       for (const floor of FLOORS) {
         for (let week = 0; week < WEEKS; week++) {
-          for (const type of ['plan', 'actual'] as RowType[]) {
-            const cellData = state[floor][week][type];
-            if (cellData.task && cellData.value) {
-              summaryData[cellData.task][type][week] += cellData.value;
+          // Plan
+          const planData = state[floor][week].plan;
+          if (planData.task && planData.value) {
+            summaryData[planData.task].plan[week] += planData.value;
+          }
+          // Actual
+          const actualData = state[floor][week].actual;
+          if (actualData) {
+            for (const task of Object.keys(actualData) as Task[]) {
+              const value = actualData[task];
+              if (value) {
+                summaryData[task].actual[week] += value;
+              }
             }
           }
         }
@@ -461,10 +547,18 @@ declare var supabase: any;
     // Find first week with data
     for (let week = 0; week < WEEKS; week++) {
       for (const floor of FLOORS) {
-        const cellData = state[floor][week][type];
-        if (cellData.task === task && cellData.value !== null && cellData.value > 0) {
-          first = week;
-          break; 
+        if (type === 'plan') {
+            const cellData = state[floor][week].plan;
+            if (cellData.task === task && cellData.value !== null && cellData.value > 0) {
+              first = week;
+              break; 
+            }
+        } else { // actual
+            const cellData = state[floor][week].actual;
+            if (cellData && cellData[task] && cellData[task]! > 0) {
+                first = week;
+                break;
+            }
         }
       }
       if (first !== -1) break;
@@ -473,10 +567,18 @@ declare var supabase: any;
     // Find last week with data
     for (let week = WEEKS - 1; week >= 0; week--) {
       for (const floor of FLOORS) {
-        const cellData = state[floor][week][type];
-        if (cellData.task === task && cellData.value !== null && cellData.value > 0) {
-          last = week;
-          break;
+        if (type === 'plan') {
+            const cellData = state[floor][week].plan;
+            if (cellData.task === task && cellData.value !== null && cellData.value > 0) {
+              last = week;
+              break;
+            }
+        } else { // actual
+            const cellData = state[floor][week].actual;
+            if (cellData && cellData[task] && cellData[task]! > 0) {
+                last = week;
+                break;
+            }
         }
       }
       if (last !== -1) break;
@@ -679,14 +781,18 @@ declare var supabase: any;
 
       // Data Rows
       FLOORS.forEach(floor => {
-          const floorTotals = {
+          const floorTotals: Record<Task, { plan: number, actual: number }> = {
               'neua-fa': { plan: 0, actual: 0 }, 'qc-ww': { plan: 0, actual: 0 }, 'qc-end': { plan: 0, actual: 0 }
           };
           for (let week = 0; week < WEEKS; week++) {
               const planData = state[floor][week].plan;
               if (planData.task && planData.value) floorTotals[planData.task].plan += planData.value;
               const actualData = state[floor][week].actual;
-              if (actualData.task && actualData.value) floorTotals[actualData.task].actual += actualData.value;
+              if (actualData) {
+                  for (const task of Object.keys(actualData) as Task[]) {
+                      if(actualData[task]) floorTotals[task].actual += actualData[task]!;
+                  }
+              }
           }
 
           const planRow = mainSheet.addRow([
@@ -701,16 +807,18 @@ declare var supabase: any;
               ...Array.from({length: WEEKS}, (_, i) => state[floor][i].plan.value || ''),
               ''
           ]);
+
+          const actualRowValues = Array.from({length: WEEKS}, (_, i) => {
+            const actualCellData = state[floor][i].actual;
+            if (!actualCellData) return '';
+            const totalValue = Object.values(actualCellData).reduce((sum, val) => sum + (val || 0), 0);
+            return totalValue > 0 ? totalValue : '';
+          });
+
           const actualRow = mainSheet.addRow([
-              '', // for merge
-              '', // for merge
-              '', // for merge
-              '', // for merge
-              '', // for merge
-              '', // for merge
-              '', // for merge
+              '', '', '', '', '', '', '', // for merge
               'Actual',
-              ...Array.from({length: WEEKS}, (_, i) => state[floor][i].actual.value || ''),
+              ...actualRowValues,
               ''
           ]);
         
@@ -728,20 +836,16 @@ declare var supabase: any;
           mainSheet.mergeCells(`Y${startRowNum}:Y${endRowNum}`); // Note column
         
           // --- Styling ---
-          // Merged Floor Cell
           mainSheet.getCell(`A${startRowNum}`).style = styles.default!;
-
-          // Style Labels
           planRow.getCell(8).style = styles['row-label']!;
           actualRow.getCell(8).style = styles['row-label']!;
         
-          // Color task cells (using the darker 'plan' color for all totals for consistency with web view)
-          mainSheet.getCell(`B${startRowNum}`).style = styles['neua-fa-plan']!; // neua-fa total (merged)
-          mainSheet.getCell(`C${startRowNum}`).style = styles['neua-fa-plan']!; // neua-fa sent (merged)
-          mainSheet.getCell(`D${startRowNum}`).style = styles['qc-ww-plan']!;   // qc-ww total (merged)
-          mainSheet.getCell(`E${startRowNum}`).style = styles['qc-ww-plan']!;   // qc-ww sent (merged)
-          mainSheet.getCell(`F${startRowNum}`).style = styles['qc-end-plan']!;   // qc-end total (merged)
-          mainSheet.getCell(`G${startRowNum}`).style = styles['qc-end-plan']!;   // qc-end sent (merged)
+          mainSheet.getCell(`B${startRowNum}`).style = styles['neua-fa-plan']!;
+          mainSheet.getCell(`C${startRowNum}`).style = styles['neua-fa-plan']!;
+          mainSheet.getCell(`D${startRowNum}`).style = styles['qc-ww-plan']!;
+          mainSheet.getCell(`E${startRowNum}`).style = styles['qc-ww-plan']!;
+          mainSheet.getCell(`F${startRowNum}`).style = styles['qc-end-plan']!;
+          mainSheet.getCell(`G${startRowNum}`).style = styles['qc-end-plan']!;
 
           // Style Weekly Data Cells
           for(let week = 0; week < WEEKS; week++) {
@@ -750,8 +854,13 @@ declare var supabase: any;
               if(planTask) planRow.getCell(col).style = styles[`${planTask}-plan`]!;
               else planRow.getCell(col).style = styles.default!;
 
-              const actualTask = state[floor][week].actual.task;
-              if(actualTask) actualRow.getCell(col).style = styles[`${actualTask}-actual`]!;
+              const actualData = state[floor][week].actual;
+              const actualTasks = actualData ? Object.keys(actualData).filter(t => actualData[t as Task]) as Task[] : [];
+
+              if(actualTasks.length > 0) {
+                  // Style with the first task's color for simplicity in Excel
+                  actualRow.getCell(col).style = styles[`${actualTasks[0]}-actual`]!;
+              }
               else actualRow.getCell(col).style = styles.default!;
           }
       });
@@ -835,10 +944,10 @@ declare var supabase: any;
           }
 
           // Row 3: Actual
-          const actualRow = sheet.addRow(['Actual']);
-          actualRow.getCell(1).style = styles['row-label']!;
+          const actualRowSheet = sheet.addRow(['Actual']);
+          actualRowSheet.getCell(1).style = styles['row-label']!;
           for (let week = 0; week < WEEKS; week++) {
-              const cell = actualRow.getCell(week + 2);
+              const cell = actualRowSheet.getCell(week + 2);
               if (actualRange.first !== -1 && week >= actualRange.first && week <= actualRange.last) {
                   const val = summaryData[taskInfo.id].actual[week];
                   cell.value = val > 0 ? val : null;
