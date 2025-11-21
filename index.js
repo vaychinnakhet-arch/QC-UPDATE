@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -7,9 +8,17 @@
 (() => {
   // --- CONSTANTS ---
   const FLOORS = [2, 3, 4, 5, 6, 7, 8];
-  const WEEKS = 16;
-  const WEEK_HEADERS = ["15-21/ก.ย.", "22-28/ก.ย.", "29-5/ต.ค.", "6-12/ต.ค.", "13-19/ต.ค.", "20-26/ต.ค.", "27-2/พ.ย.", "3-9/พ.ย.", "10-16/พ.ย.", "17-23/พ.ย.", "24-30/พ.ย.", "1-7/ธ.ค.", "8-14/ธ.ค.", "15-21/ธ.ค.", "22-28/ธ.ค.", "29-30/ธ.ค."];
   const LOCAL_STORAGE_KEY = 'schedule-app-state';
+  const SUMMARY_TASKS = [
+      {id: 'neua-fa', name: 'สรุป QC เหนือฝ้า'},
+      {id: 'qc-ww', name: 'สรุป QC WW'},
+      {id: 'qc-end', name: 'สรุป QC End'},
+  ];
+  
+  // --- DYNAMIC WEEKS ---
+  let WEEKS = 0;
+  let WEEK_HEADERS = [];
+  let MONTH_HEADERS = [];
 
   // --- SUPABASE CONSTANTS (USER-CONFIGURABLE) ---
   // IMPORTANT: Replace with your Supabase project URL and anon key.
@@ -37,8 +46,50 @@
   let state = {};
   let activeCell = null;
 
+  // --- WEEK GENERATION ---
+  function generateWeekData() {
+    const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+    const start = new Date(2025, 8, 15); // Sep 15, 2025 (Year 68)
+    const end = new Date(2026, 0, 31);   // Jan 31, 2026 (Year 69) - Includes Jan 69
+    
+    WEEK_HEADERS = [];
+    const current = new Date(start);
+
+    while (current <= end) {
+      const wStart = new Date(current);
+      const wEnd = new Date(current);
+      wEnd.setDate(wEnd.getDate() + 6);
+      
+      const sDay = wStart.getDate();
+      const eDay = wEnd.getDate();
+      const mIndex = wEnd.getMonth(); // Use end date month for grouping to match original logic
+      const monthStr = thaiMonths[mIndex];
+      
+      const label = `${sDay}-${eDay}/${monthStr}`;
+      WEEK_HEADERS.push(label);
+      
+      current.setDate(current.getDate() + 7);
+    }
+    
+    WEEKS = WEEK_HEADERS.length;
+
+    // Generate Month Headers for display
+    MONTH_HEADERS = [];
+    let lastMonth = '';
+    for (const h of WEEK_HEADERS) {
+        const m = h.split('/')[1];
+        if (m !== lastMonth) {
+            MONTH_HEADERS.push({ name: m, span: 1 });
+            lastMonth = m;
+        } else {
+            MONTH_HEADERS[MONTH_HEADERS.length - 1].span++;
+        }
+    }
+  }
+
   // --- INITIALIZATION ---
   document.addEventListener('DOMContentLoaded', async () => {
+    generateWeekData();
     await initState();
     createMainTable();
     createSummaryTables();
@@ -47,11 +98,19 @@
   });
 
   function migrateState(data) {
-    // Migration logic for old data structure
+    // Migration logic for old data structure and ensure new weeks exist
     for (const floor of FLOORS) {
-      if (!data[floor]) continue;
+      if (!data[floor]) data[floor] = {};
       for (let week = 0; week < WEEKS; week++) {
-        if (!data[floor][week]) continue;
+        if (!data[floor][week]) {
+            // Initialize missing weeks
+            data[floor][week] = {
+                plan: { value: null, task: null },
+                actual: {},
+            };
+            continue;
+        }
+
         const actualCell = data[floor][week].actual;
         // Check for old format: { task: '...', value: ... }
         if (actualCell && actualCell.task) {
@@ -160,6 +219,41 @@
   // --- TABLE CREATION ---
   function createMainTable() {
     if (!mainTableBody) return;
+
+    // 1. Create Dynamic Headers
+    const thead = document.querySelector('#main-schedule-table thead');
+    if (thead) {
+        let headerRow1 = `
+          <tr class="header-main">
+            <th rowspan="2" class="static-col-1">ชั้น</th>
+            <th colspan="2" class="th-neua-fa">เหนือผ้า</th>
+            <th colspan="2" class="th-qc-ww">QC WW</th>
+            <th colspan="2" class="th-qc-end">QC End</th>
+            <th rowspan="2"></th>
+        `;
+        MONTH_HEADERS.forEach(m => {
+            headerRow1 += `<th colspan="${m.span}">${m.name}</th>`;
+        });
+        headerRow1 += `<th rowspan="2">หมายเหตุ</th></tr>`;
+
+        let headerRow2 = `
+          <tr class="header-sub">
+            <th class="th-neua-fa">ทั้งหมด</th>
+            <th class="th-neua-fa">ส่ง</th>
+            <th class="th-qc-ww">ทั้งหมด</th>
+            <th class="th-qc-ww">ส่ง</th>
+            <th class="th-qc-end">ทั้งหมด</th>
+            <th class="th-qc-end">ส่ง</th>
+        `;
+        WEEK_HEADERS.forEach(w => {
+            headerRow2 += `<th>${w.split('/')[0]}</th>`;
+        });
+        headerRow2 += `</tr>`;
+        
+        thead.innerHTML = headerRow1 + headerRow2;
+    }
+
+    // 2. Create Body
     let tableHTML = '';
     for (const floor of FLOORS) {
       tableHTML += `
@@ -182,16 +276,16 @@
     `;
     }
     mainTableBody.innerHTML = tableHTML;
+    
+    // 3. Update Footer Colspan
+    const footerCell = document.querySelector('#main-schedule-table tfoot td[colspan]');
+    if (footerCell) {
+        footerCell.colSpan = WEEKS + 2; // Weeks + Note + Plan/Actual spacer
+    }
   }
 
   function createSummaryTables() {
-      const summaryTasks = [
-          {id: 'neua-fa', name: 'สรุป QC เหนือฝ้า'},
-          {id: 'qc-ww', name: 'สรุป QC WW'},
-          {id: 'qc-end', name: 'สรุป QC End'},
-      ];
-
-      summaryTasks.forEach(taskInfo => {
+      SUMMARY_TASKS.forEach(taskInfo => {
           const table = document.getElementById(`summary-${taskInfo.id}`);
           if (!table) return;
 
@@ -732,23 +826,40 @@
           { width: 10 }
       ];
 
-      const headerRow1 = mainSheet.addRow([
-          'ชั้น', 'เหนือผ้า', '', 'QC WW', '', 'QC End', '', '',
-          'ก.ย.', '', 'ต.ค.', '', '', '', 'พ.ย.', '', '', '', '',
-          'ธ.ค.', '', '', '', '', 'หมายเหตุ'
-      ]);
+      // Dynamic Header Row 1: Months
+      const header1Values = ['ชั้น', 'เหนือผ้า', '', 'QC WW', '', 'QC End', '', ''];
+      MONTH_HEADERS.forEach(m => {
+          header1Values.push(m.name);
+          for(let i=1; i<m.span; i++) header1Values.push('');
+      });
+      header1Values.push('หมายเหตุ');
+      
+      const headerRow1 = mainSheet.addRow(header1Values);
       headerRow1.eachCell(c => c.style = styles.header);
     
+      // Dynamic Header Row 2: Weeks
       const headerRow2 = mainSheet.addRow([
           '', 'ทั้งหมด', 'ส่ง', 'ทั้งหมด', 'ส่ง', 'ทั้งหมด', 'ส่ง', '',
           ...WEEK_HEADERS.map(h => h.split('/')[0]), ''
       ]);
       headerRow2.eachCell(c => c.style = styles.header);
     
-      mainSheet.mergeCells('A1:A2'); mainSheet.mergeCells('H1:H2'); mainSheet.mergeCells('Y1:Y2');
+      // Fixed Merges
+      mainSheet.mergeCells('A1:A2'); mainSheet.mergeCells('H1:H2'); 
       mainSheet.mergeCells('B1:C1'); mainSheet.mergeCells('D1:E1'); mainSheet.mergeCells('F1:G1');
-      mainSheet.mergeCells('I1:J1'); mainSheet.mergeCells('K1:N1'); mainSheet.mergeCells('O1:S1');
-      mainSheet.mergeCells('T1:X1');
+      
+      // Note column merge (Last column)
+      const noteColIdx = 9 + WEEKS;
+      mainSheet.mergeCells(1, noteColIdx, 2, noteColIdx);
+
+      // Dynamic Month Merges
+      let colPtr = 9;
+      MONTH_HEADERS.forEach(m => {
+          if (m.span > 1) {
+              mainSheet.mergeCells(1, colPtr, 1, colPtr + m.span - 1);
+          }
+          colPtr += m.span;
+      });
 
       ['B1', 'D1', 'F1'].forEach((cell, index) => {
         mainSheet.getCell(cell).style = styles[['neua-fa-header', 'qc-ww-header', 'qc-end-header'][index]];
@@ -812,7 +923,8 @@
           mainSheet.mergeCells(`E${startRowNum}:E${endRowNum}`); // qc-ww sent
           mainSheet.mergeCells(`F${startRowNum}:F${endRowNum}`); // qc-end total
           mainSheet.mergeCells(`G${startRowNum}:G${endRowNum}`); // qc-end sent
-          mainSheet.mergeCells(`Y${startRowNum}:Y${endRowNum}`); // Note column
+          // Note column merge
+          mainSheet.mergeCells(startRowNum, noteColIdx, endRowNum, noteColIdx);
         
           // --- Styling ---
           mainSheet.getCell(`A${startRowNum}`).style = styles.default;
@@ -867,13 +979,7 @@
       footerRow.getCell(8).style = styles.footer; // Empty cell for Plan/Actual label
 
       // --- SUMMARY SHEETS ---
-      const summaryTasks = [
-          {id: 'neua-fa', name: 'สรุป QC เหนือฝ้า'},
-          {id: 'qc-ww', name: 'สรุป QC WW'},
-          {id: 'qc-end', name: 'สรุป QC End'},
-      ];
-    
-      summaryTasks.forEach(taskInfo => {
+      SUMMARY_TASKS.forEach(taskInfo => {
           const sheet = workbook.addWorksheet(taskInfo.name);
           sheet.columns = [{ width: 12 }, ...Array(WEEKS).fill({ width: 10 })];
         
