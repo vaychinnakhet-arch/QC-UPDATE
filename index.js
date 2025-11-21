@@ -676,11 +676,9 @@
 
   // --- IMAGE CAPTURE ---
   async function captureImage() {
-    // The element we want to capture is the whole container.
     const captureElement = document.querySelector('.container');
-    // The elements inside we want to hide during capture.
     const actionsElement = document.querySelector('.header-actions');
-
+    
     if (!captureElement || !html2canvas) {
         console.error('Capture element or html2canvas not found');
         return;
@@ -688,27 +686,57 @@
 
     updateStatus('Capturing...', 'orange', false);
 
-    // Store original style to restore it later
-    const originalActionsDisplay = actionsElement.style.display;
-    
     try {
-        // Hide the action buttons so they don't appear in the screenshot
-        actionsElement.style.display = 'none';
+        // Calculate the full width required based on the widest table content
+        let contentWidth = captureElement.scrollWidth;
+        const tables = captureElement.querySelectorAll('table');
+        tables.forEach(table => {
+             if (table.offsetWidth > contentWidth) contentWidth = table.offsetWidth;
+             // Check scrollWidth to account for overflowed content
+             if (table.scrollWidth > contentWidth) contentWidth = table.scrollWidth;
+        });
+        
+        // Add some padding for safety
+        contentWidth += 40; 
+        
+        const contentHeight = captureElement.scrollHeight;
 
         const canvas = await html2canvas(captureElement, {
             scale: 2, // Higher scale for better quality
-            backgroundColor: '#ffffff', // Set a white background
-            useCORS: true, 
-            // These options help capture the entire element, not just the visible part
-            width: captureElement.scrollWidth,
-            height: captureElement.scrollHeight,
-            windowWidth: document.documentElement.offsetWidth,
-            windowHeight: document.documentElement.offsetHeight,
+            backgroundColor: '#ffffff', 
+            useCORS: true,
+            // explicitly set width to match the widest content
+            width: contentWidth, 
+            height: contentHeight,
+            windowWidth: contentWidth,
+            windowHeight: contentHeight,
+            onclone: (clonedDoc) => {
+                const clonedContainer = clonedDoc.querySelector('.container');
+                const clonedActions = clonedDoc.querySelector('.header-actions');
+                
+                // Hide action buttons in the screenshot
+                if (clonedActions) clonedActions.style.display = 'none';
+
+                if (clonedContainer) {
+                    // Remove max-width and set full width to allow expansion
+                    clonedContainer.style.maxWidth = 'none';
+                    clonedContainer.style.width = contentWidth + 'px';
+                    clonedContainer.style.height = 'auto'; 
+                    
+                    // Force all table wrappers to be visible (no scrollbars)
+                    const wrappers = clonedContainer.querySelectorAll('.table-wrapper');
+                    wrappers.forEach((wrapper) => {
+                        wrapper.style.overflow = 'visible';
+                        wrapper.style.width = 'auto';
+                    });
+                }
+            }
         });
 
-        // Create a link to download the image
+        // Create filename with date
+        const dateStr = new Date().toISOString().slice(0,10);
         const link = document.createElement('a');
-        link.download = 'schedule-capture.png';
+        link.download = `schedule-update-${dateStr}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
 
@@ -717,10 +745,7 @@
     } catch (error) {
         console.error('Failed to capture image:', error);
         updateStatus('Capture failed!', 'red');
-    } finally {
-        // IMPORTANT: Always restore the original style, even if capture fails
-        actionsElement.style.display = originalActionsDisplay;
-    }
+    } 
   }
 
   // --- DATA IMPORT/EXPORT ---
