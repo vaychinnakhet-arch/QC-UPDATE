@@ -4,1124 +4,296 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-// Let TypeScript know that these libraries are available on the global scope
 declare var ExcelJS: any;
 declare var html2canvas: any;
 declare var supabase: any;
 
-// FIX: Wrapped the code in an IIFE to prevent global scope pollution.
 (() => {
-  // --- TYPE DEFINITIONS ---
   type Task = 'neua-fa' | 'qc-ww' | 'qc-end';
-  type PlanCellData = {
-    value: number | null;
-    task: Task | null;
-  };
-  type ActualCellData = Partial<Record<Task, number>>;
+  type AppState = Record<string, Record<string, { plan: { value: number | null, task: Task | null }, actual: Partial<Record<Task, number>> }>>;
 
-  type RowType = 'plan' | 'actual';
-  type AppState = Record<string, Record<string, {
-    plan: PlanCellData;
-    actual: ActualCellData;
-  }>>;
-
-  // --- CONSTANTS ---
   const FLOORS = [2, 3, 4, 5, 6, 7, 8];
-  const LOCAL_STORAGE_KEY = 'schedule-app-state';
-  const SUMMARY_TASKS: {id: Task, name: string}[] = [
-      {id: 'neua-fa', name: 'สรุป QC เหนือฝ้า'},
-      {id: 'qc-ww', name: 'สรุป QC WW'},
-      {id: 'qc-end', name: 'สรุป QC End'},
+  const START_DATE = new Date(2025, 8, 15);
+  const SUPABASE_URL = 'https://qunnmzlrsfsgaztqiexf.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1bm5temxyc2ZzZ2F6dHFpZXhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEwMzQ3NjgsImV4cCI6MjA3NjYxMDc2OH0.6uUMhDqaq1fGia91r5vTp990amvsiZ_6_eYFJlvgk3c';
+  const TABLE_ID = 'main_schedule';
+
+  const SUMMARY_INFO = [
+    { id: 'neua-fa', name: 'สรุป QC เหนือฝ้า' },
+    { id: 'qc-ww', name: 'สรุป QC WW' },
+    { id: 'qc-end', name: 'สรุป QC End' }
   ];
-  
-  // --- DYNAMIC WEEKS ---
+
   let WEEKS = 0;
   let WEEK_HEADERS: string[] = [];
   let MONTH_HEADERS: { name: string, span: number }[] = [];
+  
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  // --- SUPABASE CONSTANTS (USER-CONFIGURABLE) ---
-  // IMPORTANT: Replace with your Supabase project URL and anon key.
-  const SUPABASE_URL = 'https://qunnmzlrsfsgaztqiexf.supabase.co'; // <-- REPLACE
-  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1bm5temxyc2ZzZ2F6dHFpZXhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEwMzQ3NjgsImV4cCI6MjA3NjYxMDc2OH0.6uUMhDqaq1fGia91r5vTp990amvsiZ_6_eYFJlvgk3c'; // <-- REPLACE
-  const SUPABASE_TABLE_ID = 'main_schedule';
-
-  // --- Supabase Client ---
-  const supabaseClient = SUPABASE_URL.includes('your-project-id') ? null : supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-
-  // --- DOM ELEMENTS ---
-  const mainTableBody = document.querySelector('#main-schedule-table tbody') as HTMLTableSectionElement;
-  const popover = document.getElementById('popover') as HTMLDivElement;
-  const popoverInput = document.getElementById('popover-input') as HTMLInputElement;
-  const popoverClear = document.getElementById('popover-clear') as HTMLButtonElement;
-  const popoverCancel = document.getElementById('popover-cancel') as HTMLButtonElement;
-  const statusIndicator = document.getElementById('status-indicator') as HTMLSpanElement;
-  const exportButton = document.getElementById('export-excel-btn') as HTMLButtonElement;
-  const exportJsonButton = document.getElementById('export-json-btn') as HTMLButtonElement;
-  const importJsonButton = document.getElementById('import-json-btn') as HTMLButtonElement;
-  const importJsonInput = document.getElementById('import-json-input') as HTMLInputElement;
-  const captureButton = document.getElementById('capture-btn') as HTMLButtonElement;
-
-  // --- STATE ---
   let state: AppState = {};
   let activeCell: HTMLElement | null = null;
+  let isSaving = false;
 
-  // --- WEEK GENERATION ---
-  function generateWeekData() {
+  let mainBody: HTMLElement | null = null;
+  let popover: HTMLElement | null = null;
+  let popInput: HTMLInputElement | null = null;
+  let syncDot: HTMLElement | null = null;
+  let statusTxt: HTMLElement | null = null;
+
+  function generateWeeks() {
     const thaiMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-    const start = new Date(2025, 8, 15); // Sep 15, 2025 (Year 68)
-    const end = new Date(2026, 0, 31);   // Jan 31, 2026 (Year 69) - Includes Jan 69
-    
+    const end = new Date(2026, 0, 31);
+    const current = new Date(START_DATE);
     WEEK_HEADERS = [];
-    const current = new Date(start);
-
     while (current <= end) {
-      const wStart = new Date(current);
-      const wEnd = new Date(current);
-      wEnd.setDate(wEnd.getDate() + 6);
-      
-      const sDay = wStart.getDate();
-      const eDay = wEnd.getDate();
-      const mIndex = wEnd.getMonth(); // Use end date month for grouping to match original logic (e.g. 29-5/ต.ค.)
-      const monthStr = thaiMonths[mIndex];
-      
-      const label = `${sDay}-${eDay}/${monthStr}`;
-      WEEK_HEADERS.push(label);
-      
+      const wS = new Date(current);
+      const wE = new Date(current);
+      wE.setDate(wE.getDate() + 6);
+      WEEK_HEADERS.push(`${wS.getDate()}-${wE.getDate()}/${thaiMonths[wE.getMonth()]}`);
       current.setDate(current.getDate() + 7);
     }
-    
     WEEKS = WEEK_HEADERS.length;
-
-    // Generate Month Headers for display
     MONTH_HEADERS = [];
-    let lastMonth = '';
-    for (const h of WEEK_HEADERS) {
-        const m = h.split('/')[1];
-        if (m !== lastMonth) {
-            MONTH_HEADERS.push({ name: m, span: 1 });
-            lastMonth = m;
-        } else {
-            MONTH_HEADERS[MONTH_HEADERS.length - 1].span++;
-        }
-    }
-  }
-
-  // --- INITIALIZATION ---
-  document.addEventListener('DOMContentLoaded', async () => {
-    generateWeekData();
-    await initState();
-    createMainTable();
-    createSummaryTables();
-    addEventListeners();
-    renderAll();
-  });
-
-  function migrateState(data: any): AppState {
-    // Migration logic for old data structure and ensure new weeks exist
-    for (const floor of FLOORS) {
-      if (!data[floor]) data[floor] = {};
-      for (let week = 0; week < WEEKS; week++) {
-        if (!data[floor][week]) {
-            // Initialize missing weeks
-            data[floor][week] = {
-                plan: { value: null, task: null },
-                actual: {},
-            };
-            continue;
-        }
-
-        const actualCell = data[floor][week].actual as any;
-        // Check for old format: { task: '...', value: ... }
-        if (actualCell && actualCell.task) { 
-          const { task, value } = actualCell;
-          data[floor][week].actual = {};
-          if (task && value) {
-            data[floor][week].actual[task] = value;
-          }
-        } else if (!actualCell || typeof actualCell !== 'object') { 
-          // Ensure it's an object if it doesn't exist or is wrong type
-          data[floor][week].actual = {};
-        }
-      }
-    }
-    return data;
+    let lastM = '';
+    WEEK_HEADERS.forEach(h => {
+      const m = h.split('/')[1];
+      if (m !== lastM) { MONTH_HEADERS.push({ name: m, span: 1 }); lastM = m; }
+      else { MONTH_HEADERS[MONTH_HEADERS.length - 1].span++; }
+    });
+    const today = new Date();
+    const dDisplay = document.getElementById('current-date-display');
+    if (dDisplay) dDisplay.textContent = `${today.getDate()} ${thaiMonths[today.getMonth()]} ${today.getFullYear() + 543}`;
   }
 
   async function initState() {
-    // If Supabase is not configured, show a warning and load from local storage
-    if (!supabaseClient) {
-      console.warn('Supabase not configured. Loading from local storage.');
-      const warningEl = document.getElementById('supabase-warning');
-      if (warningEl) warningEl.style.display = 'block';
-      updateStatus('Supabase not configured', 'orange', false);
-      loadFromLocalStorage();
-      return;
-    }
-
-    // Try loading from Supabase first
     try {
-      updateStatus('Loading from cloud...', 'orange', false);
-      const { data, error } = await supabaseClient
-          .from('schedules')
-          .select('data')
-          .eq('id', SUPABASE_TABLE_ID)
-          .single();
-
-      if (error && error.code !== 'PGRST116') { // PGRST116: "The result contains 0 rows"
-          throw error;
-      }
-
-      if (data && data.data) {
-          state = migrateState(data.data);
-          updateStatus('Loaded from cloud', 'green');
-          return;
-      }
-    } catch (error) {
-      console.error('Failed to load from Supabase:', error);
-      updateStatus('Cloud load failed', 'red', false);
-    }
-    
-    // Fallback to local storage if Supabase fails or has no data
-    console.log('No cloud data found. Falling back to local storage.');
-    loadFromLocalStorage();
+      const { data, error } = await supabaseClient.from('schedules').select('data').eq('id', TABLE_ID).single();
+      if (!error && data) state = data.data;
+      else FLOORS.forEach(f => { state[f] = {}; for (let w = 0; w < WEEKS; w++) state[f][w] = { plan: { value: null, task: null }, actual: {} }; });
+    } catch (e) { console.error(e); }
   }
 
-  function loadFromLocalStorage() {
-    const savedState = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (savedState) {
-      const parsedState = JSON.parse(savedState);
-      state = migrateState(parsedState);
-      updateStatus('Loaded locally', 'green');
-    } else {
-      // Initialize fresh state if nothing is saved
-      state = {};
-      for (const floor of FLOORS) {
-        state[floor] = {};
-        for (let i = 0; i < WEEKS; i++) {
-          state[floor][i] = {
-            plan: { value: null, task: null },
-            actual: {},
-          };
-        }
-      }
-      updateStatus('Ready', 'green');
-    }
+  function setupRealtime() {
+    supabaseClient.channel('db-sync').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'schedules', filter: `id=eq.${TABLE_ID}` }, (p: any) => {
+      if (!isSaving && p.new?.data) { state = p.new.data; renderAll(); pulse(); }
+    }).subscribe();
   }
 
-  async function saveState() {
-    // Always save to local storage for offline access and speed
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
-    updateStatus('Saved locally', 'green');
-    
-    // If Supabase is not configured, stop here
-    if (!supabaseClient) {
-      return;
-    }
+  function pulse() { if(syncDot) { syncDot.classList.add('pulse'); setTimeout(() => syncDot?.classList.remove('pulse'), 500); } }
 
-    // Attempt to save to Supabase
+  async function save() {
+    isSaving = true;
+    if (statusTxt) statusTxt.textContent = 'Saving...';
     try {
-      updateStatus('Saving to cloud...', 'orange', false);
-      const { error } = await supabaseClient
-        .from('schedules')
-        .upsert({ id: SUPABASE_TABLE_ID, data: state });
-      
-      if (error) {
-          throw error;
-      }
-      updateStatus('Saved to cloud', 'green');
-    } catch (error) {
-      console.error('Failed to save to Supabase:', error);
-      updateStatus('Cloud save failed!', 'red');
-    }
+      const { error } = await supabaseClient.from('schedules').upsert({ id: TABLE_ID, data: state, updated_at: new Date().toISOString() });
+      if (!error) { if (statusTxt) statusTxt.textContent = 'Online'; pulse(); }
+    } catch (e) { if (statusTxt) statusTxt.textContent = 'Offline'; }
+    isSaving = false;
   }
 
-  // --- TABLE CREATION ---
   function createMainTable() {
-    if (!mainTableBody) return;
-
-    // 1. Create Dynamic Headers
     const thead = document.querySelector('#main-schedule-table thead');
-    if (thead) {
-        let headerRow1 = `
-          <tr class="header-main">
-            <th rowspan="2" class="static-col-1">ชั้น</th>
-            <th colspan="2" class="th-neua-fa">เหนือผ้า</th>
-            <th colspan="2" class="th-qc-ww">QC WW</th>
-            <th colspan="2" class="th-qc-end">QC End</th>
-            <th rowspan="2"></th>
-        `;
-        MONTH_HEADERS.forEach(m => {
-            headerRow1 += `<th colspan="${m.span}">${m.name}</th>`;
-        });
-        headerRow1 += `<th rowspan="2">หมายเหตุ</th></tr>`;
+    if (!thead || !mainBody) return;
+    let h1 = `<tr><th rowspan="2" class="static-col-1">ชั้น</th><th colspan="2" class="th-neua-fa">เหนือผ้า</th><th colspan="2" class="th-qc-ww">QC WW</th><th colspan="2" class="th-qc-end">QC End</th><th rowspan="2"></th>`;
+    MONTH_HEADERS.forEach(m => h1 += `<th colspan="${m.span}">${m.name}</th>`);
+    h1 += `</tr>`;
+    let h2 = `<tr><th class="th-neua-fa">ทั้งหมด</th><th class="th-neua-fa">ส่ง</th><th class="th-qc-ww">ทั้งหมด</th><th class="th-qc-ww">ส่ง</th><th class="th-qc-end">ทั้งหมด</th><th class="th-qc-end">ส่ง</th>`;
+    WEEK_HEADERS.forEach(w => h2 += `<th>${w.split('-')[0]}</th>`);
+    h2 += `</tr>`;
+    thead.innerHTML = h1 + h2;
 
-        let headerRow2 = `
-          <tr class="header-sub">
-            <th class="th-neua-fa">ทั้งหมด</th>
-            <th class="th-neua-fa">ส่ง</th>
-            <th class="th-qc-ww">ทั้งหมด</th>
-            <th class="th-qc-ww">ส่ง</th>
-            <th class="th-qc-end">ทั้งหมด</th>
-            <th class="th-qc-end">ส่ง</th>
-        `;
-        WEEK_HEADERS.forEach(w => {
-            headerRow2 += `<th>${w.split('/')[0]}</th>`;
-        });
-        headerRow2 += `</tr>`;
-        
-        thead.innerHTML = headerRow1 + headerRow2;
-    }
-
-    // 2. Create Body
-    let tableHTML = '';
-    for (const floor of FLOORS) {
-      tableHTML += `
-      <tr>
-        <td rowspan="2" class="static-col-1">${floor}</td>
-        <td rowspan="2" data-floor="${floor}" data-task-total="neua-fa"></td>
-        <td rowspan="2" data-floor="${floor}" data-task-sent="neua-fa"></td>
-        <td rowspan="2" data-floor="${floor}" data-task-total="qc-ww"></td>
-        <td rowspan="2" data-floor="${floor}" data-task-sent="qc-ww"></td>
-        <td rowspan="2" data-floor="${floor}" data-task-total="qc-end"></td>
-        <td rowspan="2" data-floor="${floor}" data-task-sent="qc-end"></td>
-        <td class="row-label static-col-2">Plan</td>
-        ${Array.from({ length: WEEKS }).map((_, i) => `<td class="editable-cell" data-floor="${floor}" data-week="${i}" data-type="plan"></td>`).join('')}
-        <td rowspan="2"></td>
-      </tr>
-      <tr>
-        <td class="row-label static-col-2">Actual</td>
-        ${Array.from({ length: WEEKS }).map((_, i) => `<td class="editable-cell" data-floor="${floor}" data-week="${i}" data-type="actual"></td>`).join('')}
-      </tr>
-    `;
-    }
-    mainTableBody.innerHTML = tableHTML;
-    
-    // 3. Update Footer Colspan
-    const footerCell = document.querySelector('#main-schedule-table tfoot td[colspan]') as HTMLTableCellElement;
-    if (footerCell) {
-        footerCell.colSpan = WEEKS + 2; // Weeks + Note + Plan/Actual spacer
-    }
+    let bHtml = '';
+    FLOORS.forEach(f => {
+      bHtml += `<tr><td rowspan="2" class="static-col-1">${f}</td><td rowspan="2" data-total="neua-fa" data-f="${f}" class="floor-total"></td><td rowspan="2" data-sent="neua-fa" data-f="${f}" class="floor-total"></td><td rowspan="2" data-total="qc-ww" data-f="${f}" class="floor-total"></td><td rowspan="2" data-sent="qc-ww" data-f="${f}" class="floor-total"></td><td rowspan="2" data-total="qc-end" data-f="${f}" class="floor-total"></td><td rowspan="2" data-sent="qc-end" data-f="${f}" class="floor-total"></td><td class="static-col-2">Plan</td>${Array.from({ length: WEEKS }).map((_, i) => `<td class="editable-cell" data-f="${f}" data-w="${i}" data-t="plan"></td>`).join('')}</tr>`;
+      bHtml += `<tr><td class="static-col-2">Actual</td>${Array.from({ length: WEEKS }).map((_, i) => `<td class="editable-cell" data-f="${f}" data-w="${i}" data-t="actual"></td>`).join('')}</tr>`;
+    });
+    mainBody.innerHTML = bHtml;
   }
 
   function createSummaryTables() {
-      SUMMARY_TASKS.forEach(taskInfo => {
-          const table = document.getElementById(`summary-${taskInfo.id}`) as HTMLTableElement;
-          if (!table) return;
-
-          const headerTitleRow = `<tr><th colspan="${WEEKS + 1}">${taskInfo.name}</th></tr>`;
-          const headerWeekRow = `
-          <tr>
-            <th class="row-label"></th>
-            ${WEEK_HEADERS.map(h => `<th>${h}</th>`).join('')}
-          </tr>
-        `;
-    
-          const bodyRows = ['Plan', 'Acc. Plan', 'Actual', 'Acc. Actual'].map(label => `
-          <tr data-row-type="${label.toLowerCase().replace('. ', '-')}">
-            <td class="row-label">${label}</td>
-            ${Array.from({ length: WEEKS }).map((_, i) => `<td data-week="${i}">0</td>`).join('')}
-          </tr>
-        `).join('');
-        
-          table.innerHTML = `<thead>${headerTitleRow}${headerWeekRow}</thead><tbody>${bodyRows}</tbody>`;
-        });
-  }
-
-  // --- EVENT LISTENERS ---
-  function addEventListeners() {
-    mainTableBody.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      if (target.classList.contains('editable-cell')) {
-        showPopover(target);
-      } else if (target.parentElement?.classList.contains('editable-cell')) {
-        // Handle clicks on inner divs of split cells
-        showPopover(target.parentElement);
-      }
+    const container = document.querySelector('.summary-section');
+    if (!container) return;
+    container.innerHTML = '';
+    SUMMARY_INFO.forEach(task => {
+      const card = document.createElement('div'); card.className = 'summary-card';
+      const wrapper = document.createElement('div'); wrapper.className = 'table-wrapper';
+      const table = document.createElement('table'); table.id = `summary-${task.id}`;
+      let h = `<thead><tr><th colspan="${WEEKS + 1}" class="th-${task.id.includes('neua') ? 'neua-fa' : task.id.includes('ww') ? 'qc-ww' : 'qc-end'}">${task.name}</th></tr>`;
+      h += `<tr><th class="row-label"></th>${WEEK_HEADERS.map(w => `<th>${w}</th>`).join('')}</tr></thead>`;
+      h += `<tbody>` + ['Plan', 'Acc. Plan', 'Actual', 'Acc. Actual'].map(r => `<tr data-row="${r.toLowerCase().replace('. ', '-')}"><td class="row-label">${r}</td>${Array.from({ length: WEEKS }).map((_, i) => `<td data-w="${i}">0</td>`).join('')}</tr>`).join('') + `</tbody>`;
+      table.innerHTML = h; wrapper.appendChild(table); card.appendChild(wrapper); container.appendChild(card);
     });
-
-    popover.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const target = e.target as HTMLElement;
-      const task = target.dataset.task as Task;
-      if (task) {
-        updateCell(task);
-      }
-    });
-
-    popoverClear.addEventListener('click', () => updateCell(null));
-    popoverCancel.addEventListener('click', hidePopover);
-    document.addEventListener('click', (e) => {
-      if (popover.style.display === 'block' && !popover.contains(e.target as Node) && e.target !== activeCell) {
-        hidePopover();
-      }
-    });
-    exportButton.addEventListener('click', exportToExcel);
-    exportJsonButton.addEventListener('click', exportStateToJson);
-    importJsonButton.addEventListener('click', () => importJsonInput.click());
-    importJsonInput.addEventListener('change', importStateFromJson);
-    captureButton.addEventListener('click', captureImage);
-  }
-
-
-  // --- POPOVER LOGIC ---
-  function showPopover(cell: HTMLElement) {
-    activeCell = cell;
-    const { floor, week, type } = cell.dataset;
-    if (!floor || !week || !type) return;
-
-    if (type as RowType === 'plan') {
-      const cellData = state[floor][week].plan;
-      popoverInput.value = cellData.value?.toString() || '';
-    } else {
-      // For actual cells, don't pre-fill. User types a value and picks a task to add/update.
-      popoverInput.value = '';
-    }
-  
-    const rect = cell.getBoundingClientRect();
-    popover.style.display = 'block';
-    popover.style.top = `${window.scrollY + rect.bottom}px`;
-    popover.style.left = `${window.scrollX + rect.left}px`;
-    popoverInput.focus();
-  }
-
-  function hidePopover() {
-    popover.style.display = 'none';
-    activeCell = null;
-  }
-
-  // --- DATA & RENDER LOGIC ---
-  function updateCell(task: Task | null) {
-    if (!activeCell) return;
-    const { floor, week, type } = activeCell.dataset;
-    if (!floor || !week || !type) return;
-    const rowType = type as RowType;
-
-    // If task is null, it's a 'clear' operation.
-    if (task === null) {
-        if (rowType === 'plan') {
-            state[floor][week].plan = { value: null, task: null };
-        } else {
-            state[floor][week].actual = {}; // Clear all actual tasks
-        }
-    } else {
-        const value = popoverInput.value ? parseInt(popoverInput.value, 10) : null;
-        if (rowType === 'plan') {
-            state[floor][week].plan = { value, task };
-        } else { // 'actual'
-            if (!state[floor][week].actual) {
-                state[floor][week].actual = {};
-            }
-            if (value === null || value <= 0) {
-                // If value is empty or zero, remove that task
-                delete state[floor][week].actual[task];
-            } else {
-                // Add or update the task with the new value
-                state[floor][week].actual[task] = value;
-            }
-        }
-    }
-
-    renderAll();
-    saveState();
-    hidePopover();
   }
 
   function renderAll() {
-    renderMainTable();
-    renderFloorTotals();
-    calculateAndRenderSummaries();
-  }
+    if (!mainBody) return;
+    const sumData: any = { 'neua-fa': { p: Array(WEEKS).fill(0), a: Array(WEEKS).fill(0) }, 'qc-ww': { p: Array(WEEKS).fill(0), a: Array(WEEKS).fill(0) }, 'qc-end': { p: Array(WEEKS).fill(0), a: Array(WEEKS).fill(0) } };
+    const globalTotals: any = { 'neua-fa': { p: 0, a: 0 }, 'qc-ww': { p: 0, a: 0 }, 'qc-end': { p: 0, a: 0 } };
 
-  function renderMainTable() {
-    for (const floor of FLOORS) {
-      for (let week = 0; week < WEEKS; week++) {
-        const planCellData = state[floor][week].plan;
+    const today = new Date();
+    const msInWeek = 7 * 24 * 60 * 60 * 1000;
+    const currentWeekIdx = Math.floor((today.getTime() - START_DATE.getTime()) / msInWeek);
 
-        // Render Plan Cell
-        const planCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-week="${week}"][data-type="plan"]`) as HTMLElement;
-        planCell.textContent = planCellData.value?.toString() || '';
-        planCell.className = 'editable-cell'; // Reset classes
-        if (planCellData.task) {
-          planCell.classList.add(`bg-${planCellData.task}-plan`);
+    FLOORS.forEach(f => {
+      const fT: any = { 'neua-fa': { p: 0, a: 0 }, 'qc-ww': { p: 0, a: 0 }, 'qc-end': { p: 0, a: 0 } };
+      for (let w = 0; w < WEEKS; w++) {
+        const d = state[f][w];
+        const pc = mainBody!.querySelector(`[data-f="${f}"][data-w="${w}"][data-t="plan"]`) as HTMLElement;
+        if (pc) {
+          pc.textContent = d.plan.value?.toString() || '';
+          pc.className = 'editable-cell' + (d.plan.task ? ` bg-${d.plan.task}-plan` : '');
         }
-      
-        // Render Actual Cell
-        const actualCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-week="${week}"][data-type="actual"]`) as HTMLElement;
-        const actualCellData = state[floor][week].actual;
-        const tasks = actualCellData ? (Object.keys(actualCellData) as Task[]).filter(t => actualCellData[t]) : [];
-
-        // Cleanup cell before rendering
-        actualCell.innerHTML = '';
-        actualCell.className = 'editable-cell';
-        actualCell.style.padding = '';
-
-        if (tasks.length === 0) {
-            // Cell is empty, do nothing
-        } else if (tasks.length === 1) {
-            const task = tasks[0];
-            actualCell.textContent = actualCellData[task]?.toString() || '';
-            actualCell.classList.add(`bg-${task}-actual`);
-        } else { // 2 or more tasks
-            actualCell.style.padding = '0';
-            const container = document.createElement('div');
-            container.className = 'actual-cell-split-container';
-
-            // Display all tasks
-            tasks.forEach(task => {
-                const value = actualCellData[task];
-                const splitDiv = document.createElement('div');
-                splitDiv.className = `actual-cell-split bg-${task}-actual`;
-                splitDiv.textContent = value?.toString() || '';
-                container.appendChild(splitDiv);
-            });
-            actualCell.appendChild(container);
+        if (d.plan.task && d.plan.value) { 
+            sumData[d.plan.task].p[w] += d.plan.value; 
+            fT[d.plan.task].p += d.plan.value; 
+            globalTotals[d.plan.task].p += d.plan.value;
         }
-      }
-    }
-  }
 
-  function renderFloorTotals() {
-      for (const floor of FLOORS) {
-          const floorTotals: Record<Task, { plan: number; actual: number }> = {
-              'neua-fa': { plan: 0, actual: 0 },
-              'qc-ww': { plan: 0, actual: 0 },
-              'qc-end': { plan: 0, actual: 0 },
-          };
-
-          for (let week = 0; week < WEEKS; week++) {
-              const planData = state[floor][week].plan;
-              if (planData.task && planData.value) {
-                  floorTotals[planData.task].plan += planData.value;
-              }
-              const actualData = state[floor][week].actual;
-              if (actualData) {
-                  for (const task of Object.keys(actualData) as Task[]) {
-                      const value = actualData[task];
-                      if (value) {
-                          floorTotals[task].actual += value;
-                      }
-                  }
-              }
+        const ac = mainBody!.querySelector(`[data-f="${f}"][data-w="${w}"][data-t="actual"]`) as HTMLElement;
+        if (ac) {
+          const tasks = Object.keys(d.actual) as Task[];
+          ac.innerHTML = ''; ac.className = 'editable-cell';
+          if (tasks.length === 1) { ac.textContent = d.actual[tasks[0]]?.toString() || ''; ac.classList.add(`bg-${tasks[0]}-actual`); }
+          else if (tasks.length > 1) {
+            const wrap = document.createElement('div'); wrap.style.display='flex'; wrap.style.height='100%';
+            tasks.forEach(t => { const dv = document.createElement('div'); dv.className = `bg-${t}-actual`; dv.style.flex = '1'; dv.textContent = d.actual[t]!.toString(); wrap.appendChild(dv); });
+            ac.appendChild(wrap); ac.style.padding = '0';
           }
+          tasks.forEach(t => { 
+              const val = d.actual[t] || 0;
+              sumData[t].a[w] += val; 
+              fT[t].a += val; 
+              globalTotals[t].a += val;
+          });
+        }
+      }
+      SUMMARY_INFO.forEach(t => {
+        const totalEl = mainBody!.querySelector(`[data-total="${t.id}"][data-f="${f}"]`);
+        const sentEl = mainBody!.querySelector(`[data-sent="${t.id}"][data-f="${f}"]`);
+        if (totalEl) totalEl.textContent = fT[t.id].p ? fT[t.id].p.toString() : '';
+        if (sentEl) sentEl.textContent = fT[t.id].a ? fT[t.id].a.toString() : '';
+      });
+    });
+
+    SUMMARY_INFO.forEach(task => {
+      const table = document.getElementById(`summary-${task.id}`);
+      if (!table) return;
+      let accP = 0, accA = 0;
+      for (let w = 0; w < WEEKS; w++) {
+        const p = sumData[task.id].p[w] || 0;
+        const a = sumData[task.id].a[w] || 0;
+        const isFuture = w > currentWeekIdx;
         
-          // 'neua-fa' total (merged)
-          const neuaFaPlanTotal = floorTotals['neua-fa'].plan;
-          const neuaFaTotalCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-task-total="neua-fa"]`);
-          if (neuaFaTotalCell) neuaFaTotalCell.textContent = neuaFaPlanTotal > 0 ? neuaFaPlanTotal.toString() : '';
-
-          // 'neua-fa' sent
-          const neuaFaActualSent = floorTotals['neua-fa'].actual;
-          const neuaFaSentCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-task-sent="neua-fa"]`);
-          if (neuaFaSentCell) neuaFaSentCell.textContent = neuaFaActualSent > 0 ? neuaFaActualSent.toString() : '';
-
-          // 'qc-ww' total and sent
-          const qcWwPlanTotal = floorTotals['qc-ww'].plan;
-          const qcWwActualSent = floorTotals['qc-ww'].actual;
-          const qcWwTotalCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-task-total="qc-ww"]`);
-          if (qcWwTotalCell) qcWwTotalCell.textContent = qcWwPlanTotal > 0 ? qcWwPlanTotal.toString() : '';
-          const qcWwSentCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-task-sent="qc-ww"]`);
-          if (qcWwSentCell) qcWwSentCell.textContent = qcWwActualSent > 0 ? qcWwActualSent.toString() : '';
-
-          // 'qc-end' total and sent
-          const qcEndPlanTotal = floorTotals['qc-end'].plan;
-          const qcEndActualSent = floorTotals['qc-end'].actual;
-          const qcEndTotalCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-task-total="qc-end"]`);
-          if (qcEndTotalCell) qcEndTotalCell.textContent = qcEndPlanTotal > 0 ? qcEndPlanTotal.toString() : '';
-          const qcEndSentCell = mainTableBody.querySelector(`[data-floor="${floor}"][data-task-sent="qc-end"]`);
-          if (qcEndSentCell) qcEndSentCell.textContent = qcEndActualSent > 0 ? qcEndActualSent.toString() : '';
-      }
-  }
-
-
-  function getSummaryData() {
-      const summaryData: Record<Task, { plan: number[], actual: number[] }> = {
-        'neua-fa': { plan: Array(WEEKS).fill(0), actual: Array(WEEKS).fill(0) },
-        'qc-ww': { plan: Array(WEEKS).fill(0), actual: Array(WEEKS).fill(0) },
-        'qc-end': { plan: Array(WEEKS).fill(0), actual: Array(WEEKS).fill(0) },
-      };
-  
-      // Calculate weekly totals from state
-      for (const floor of FLOORS) {
-        for (let week = 0; week < WEEKS; week++) {
-          // Plan
-          const planData = state[floor][week].plan;
-          if (planData.task && planData.value) {
-            summaryData[planData.task].plan[week] += planData.value;
-          }
-          // Actual
-          const actualData = state[floor][week].actual;
-          if (actualData) {
-            for (const task of Object.keys(actualData) as Task[]) {
-              const value = actualData[task];
-              if (value) {
-                summaryData[task].actual[week] += value;
-              }
-            }
-          }
+        accP += p;
+        if (!isFuture) {
+            accA += a;
         }
-      }
-      return summaryData;
-  }
-
-  function calculateAndRenderSummaries() {
-    const summaryData = getSummaryData();
-
-    // 1. Render summaries and calculate accumulated values
-    for (const task of ['neua-fa', 'qc-ww', 'qc-end'] as Task[]) {
-        const table = document.getElementById(`summary-${task}`) as HTMLTableElement;
         
-        const planRange = getTaskWeekRange(task, 'plan');
-        const actualRange = getTaskWeekRange(task, 'actual');
-
-        let accPlan = 0;
-        let accActual = 0;
-
-        for (let week = 0; week < WEEKS; week++) {
-            const planValue = summaryData[task].plan[week];
-            const actualValue = summaryData[task].actual[week];
-            
-            // Always calculate accumulated values
-            accPlan += planValue;
-            accActual += actualValue;
-
-            const planCell = table.querySelector(`[data-row-type="plan"] [data-week="${week}"]`) as HTMLElement;
-            const accPlanCell = table.querySelector(`[data-row-type="acc-plan"] [data-week="${week}"]`) as HTMLElement;
-            const actualCell = table.querySelector(`[data-row-type="actual"] [data-week="${week}"]`) as HTMLElement;
-            const accActualCell = table.querySelector(`[data-row-type="acc-actual"] [data-week="${week}"]`) as HTMLElement;
-            
-            const allCells = [planCell, accPlanCell, actualCell, accActualCell];
-            allCells.forEach(cell => cell.classList.remove('inactive-cell'));
-
-            // --- Plan and Acc. Plan Rows ---
-            if (planRange.first !== -1 && week >= planRange.first && week <= planRange.last) {
-                planCell.textContent = planValue > 0 ? planValue.toString() : '0';
-                accPlanCell.textContent = accPlan > 0 ? accPlan.toString() : '0';
-            } else {
-                planCell.textContent = '';
-                accPlanCell.textContent = '';
-                planCell.classList.add('inactive-cell');
-                accPlanCell.classList.add('inactive-cell');
-            }
-
-            // --- Actual and Acc. Actual Rows ---
-            if (actualRange.first !== -1 && week >= actualRange.first && week <= actualRange.last) {
-                actualCell.textContent = actualValue > 0 ? actualValue.toString() : '0';
-                accActualCell.textContent = accActual > 0 ? accActual.toString() : '0';
-            } else {
-                actualCell.textContent = '';
-                accActualCell.textContent = '';
-                actualCell.classList.add('inactive-cell');
-                accActualCell.classList.add('inactive-cell');
-            }
-        }
-    }
-    
-    // 2. Calculate and render main table totals in the footer
-    const totalNeuaFaPlan = summaryData['neua-fa'].plan.reduce((a, b) => a + b, 0);
-    const totalNeuaFaActual = summaryData['neua-fa'].actual.reduce((a, b) => a + b, 0);
-    const totalQcWwPlan = summaryData['qc-ww'].plan.reduce((a, b) => a + b, 0);
-    const totalQcWwActual = summaryData['qc-ww'].actual.reduce((a, b) => a + b, 0);
-    const totalQcEndPlan = summaryData['qc-end'].plan.reduce((a, b) => a + b, 0);
-    const totalQcEndActual = summaryData['qc-end'].actual.reduce((a, b) => a + b, 0);
-    
-    document.getElementById('total-neua-fa-plan')!.textContent = totalNeuaFaPlan > 0 ? totalNeuaFaPlan.toString() : '';
-    document.getElementById('total-neua-fa-sent')!.textContent = totalNeuaFaActual > 0 ? totalNeuaFaActual.toString() : '';
-    document.getElementById('total-qc-ww-plan')!.textContent = totalQcWwPlan > 0 ? totalQcWwPlan.toString() : '';
-    document.getElementById('total-qc-ww-sent')!.textContent = totalQcWwActual > 0 ? totalQcWwActual.toString() : '';
-    document.getElementById('total-qc-end-plan')!.textContent = totalQcEndPlan > 0 ? totalQcEndPlan.toString() : '';
-    document.getElementById('total-qc-end-sent')!.textContent = totalQcEndActual > 0 ? totalQcEndActual.toString() : '';
-  }
-
-  // --- UTILITY FUNCTIONS ---
-  function getTaskWeekRange(task: Task, type: RowType): { first: number, last: number } {
-    let first = -1;
-    let last = -1;
-    
-    // Find first week with data
-    for (let week = 0; week < WEEKS; week++) {
-      for (const floor of FLOORS) {
-        if (type === 'plan') {
-            const cellData = state[floor][week].plan;
-            if (cellData.task === task && cellData.value !== null && cellData.value > 0) {
-              first = week;
-              break; 
-            }
-        } else { // actual
-            const cellData = state[floor][week].actual;
-            if (cellData && cellData[task] && cellData[task]! > 0) {
-                first = week;
-                break;
-            }
-        }
-      }
-      if (first !== -1) break;
-    }
-
-    // Find last week with data
-    for (let week = WEEKS - 1; week >= 0; week--) {
-      for (const floor of FLOORS) {
-        if (type === 'plan') {
-            const cellData = state[floor][week].plan;
-            if (cellData.task === task && cellData.value !== null && cellData.value > 0) {
-              last = week;
-              break;
-            }
-        } else { // actual
-            const cellData = state[floor][week].actual;
-            if (cellData && cellData[task] && cellData[task]! > 0) {
-                last = week;
-                break;
-            }
-        }
-      }
-      if (last !== -1) break;
-    }
-
-    return { first, last };
-  }
-
-  function updateStatus(message: string, color: string, autoClear: boolean = true) {
-      if(statusIndicator) {
-          statusIndicator.textContent = message;
-          statusIndicator.style.color = color;
-          if(autoClear) {
-              setTimeout(() => {
-                  if(statusIndicator.textContent === message) {
-                      updateStatus('Ready', 'green', false);
-                  }
-              }, 3000);
-          }
-      }
-  }
-
-  // --- IMAGE CAPTURE ---
-  async function captureImage() {
-    const captureElement = document.querySelector('.container') as HTMLElement;
-    const actionsElement = document.querySelector('.header-actions') as HTMLElement;
-    
-    if (!captureElement || !html2canvas) {
-        console.error('Capture element or html2canvas not found');
-        return;
-    }
-
-    updateStatus('Capturing...', 'orange', false);
-
-    try {
-        // Calculate the full width required based on the widest table content
-        let contentWidth = captureElement.scrollWidth;
-        const tables = captureElement.querySelectorAll('table');
-        tables.forEach(table => {
-             if (table.offsetWidth > contentWidth) contentWidth = table.offsetWidth;
-             // Check scrollWidth to account for overflowed content
-             if (table.scrollWidth > contentWidth) contentWidth = table.scrollWidth;
-        });
+        const pEl = table.querySelector(`[data-row="plan"] [data-w="${w}"]`);
+        const apEl = table.querySelector(`[data-row="acc-plan"] [data-w="${w}"]`);
+        const aEl = table.querySelector(`[data-row="actual"] [data-w="${w}"]`);
+        const aaEl = table.querySelector(`[data-row="acc-actual"] [data-w="${w}"]`);
         
-        // Add some padding for safety
-        contentWidth += 40; 
-        
-        const contentHeight = captureElement.scrollHeight;
-
-        const canvas = await html2canvas(captureElement, {
-            scale: 2, // Higher scale for better quality
-            backgroundColor: '#ffffff', 
-            useCORS: true,
-            // explicitly set width to match the widest content
-            width: contentWidth, 
-            height: contentHeight,
-            windowWidth: contentWidth,
-            windowHeight: contentHeight,
-            onclone: (clonedDoc) => {
-                const clonedContainer = clonedDoc.querySelector('.container') as HTMLElement;
-                const clonedActions = clonedDoc.querySelector('.header-actions') as HTMLElement;
-                
-                // Hide action buttons in the screenshot
-                if (clonedActions) clonedActions.style.display = 'none';
-
-                if (clonedContainer) {
-                    // Remove max-width and set full width to allow expansion
-                    clonedContainer.style.maxWidth = 'none';
-                    clonedContainer.style.width = contentWidth + 'px';
-                    clonedContainer.style.height = 'auto'; 
-                    
-                    // Force all table wrappers to be visible (no scrollbars)
-                    const wrappers = clonedContainer.querySelectorAll('.table-wrapper');
-                    wrappers.forEach((wrapper: any) => {
-                        wrapper.style.overflow = 'visible';
-                        wrapper.style.width = 'auto';
-                    });
-                }
-            }
-        });
-
-        // Create filename with date
-        const dateStr = new Date().toISOString().slice(0,10);
-        const link = document.createElement('a');
-        link.download = `schedule-update-${dateStr}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-
-        updateStatus('Capture successful!', 'green');
-
-    } catch (error) {
-        console.error('Failed to capture image:', error);
-        updateStatus('Capture failed!', 'red');
-    } 
-  }
-
-  // --- DATA IMPORT/EXPORT ---
-  function exportStateToJson() {
-    try {
-      updateStatus('Exporting JSON...', 'orange', false);
-      const jsonString = JSON.stringify(state, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'schedule-data.json';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      updateStatus('JSON Export Successful!', 'green');
-    } catch (error) {
-      console.error('Failed to export state to JSON:', error);
-      updateStatus('JSON Export Failed!', 'red');
-    }
-  }
-
-  function importStateFromJson(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) {
-      return;
-    }
-    const file = input.files[0];
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result;
-        if (typeof text !== 'string') {
-          throw new Error("File could not be read.");
-        }
-        const importedState = JSON.parse(text);
-
-        // Basic validation: Check if the imported object has keys that are in FLOORS
-        const firstFloorKey = FLOORS[0].toString();
-        if (!importedState[firstFloorKey] || !importedState[firstFloorKey]['0']) {
-           throw new Error('Invalid or corrupted data file.');
-        }
-
-        state = importedState;
-        saveState();
-        renderAll();
-        updateStatus('Import Successful!', 'green');
-      } catch (error) {
-        console.error('Failed to import state from JSON:', error);
-        const message = error instanceof Error ? error.message : 'An unknown error occurred.';
-        updateStatus(`Import Failed: ${message}`, 'red', false);
-      } finally {
-          // Reset the input value to allow importing the same file again
-          input.value = '';
+        if (pEl) pEl.textContent = p.toString();
+        if (apEl) apEl.textContent = accP.toString();
+        if (aEl) aEl.textContent = isFuture ? '' : a.toString();
+        if (aaEl) aaEl.textContent = isFuture ? '' : accA.toString();
       }
-    };
+    });
 
-    reader.onerror = () => {
-       updateStatus('Failed to read file!', 'red');
-       input.value = '';
-    };
-    
-    reader.readAsText(file);
+    SUMMARY_INFO.forEach(t => {
+      const pEl = document.getElementById(`total-${t.id}-plan`);
+      const aEl = document.getElementById(`total-${t.id}-sent`);
+      if (pEl) pEl.textContent = globalTotals[t.id].p.toString();
+      if (aEl) aEl.textContent = globalTotals[t.id].a.toString();
+    });
   }
 
-  // --- EXCEL EXPORT ---
+  function addEvents() {
+    if (!mainBody || !popover || !popInput) return;
+
+    mainBody.addEventListener('click', e => {
+      const c = (e.target as HTMLElement).closest('.editable-cell') as HTMLElement;
+      if (c) {
+        activeCell = c; const { f, w, t } = c.dataset;
+        popInput!.value = t === 'plan' ? (state[f!][w!].plan.value?.toString() || '') : '';
+        const rect = c.getBoundingClientRect();
+        popover!.style.display = 'block'; popover!.style.top = `${window.scrollY + rect.bottom + 5}px`; popover!.style.left = `${Math.min(window.scrollX + rect.left, window.innerWidth - 220)}px`;
+        popInput!.focus(); popInput!.select();
+      }
+    });
+
+    popover.addEventListener('click', e => {
+      const task = (e.target as HTMLElement).dataset.task as Task;
+      if (task && activeCell) {
+        const val = parseInt(popInput!.value, 10); const final = isNaN(val) ? null : val;
+        const { f, w, t } = activeCell!.dataset;
+        if (t === 'plan') state[f!][w!].plan = { value: final, task };
+        else { if (final === null || final <= 0) delete state[f!][w!].actual[task]; else state[f!][w!].actual[task] = final; }
+        renderAll(); save(); popover!.style.display = 'none';
+      }
+    });
+
+    document.getElementById('popover-clear')?.addEventListener('click', () => {
+      if (!activeCell) return;
+      const { f, w, t } = activeCell.dataset;
+      if (t === 'plan') state[f!][w!].plan = { value: null, task: null }; else state[f!][w!].actual = {};
+      renderAll(); save(); popover!.style.display = 'none';
+    });
+    document.getElementById('popover-cancel')?.addEventListener('click', () => { if(popover) popover.style.display = 'none'; });
+    
+    document.getElementById('capture-btn')?.addEventListener('click', async () => {
+        const el = document.querySelector('.container');
+        if (!el) return;
+        const canvas = await html2canvas(el, { scale: 2 });
+        const link = document.createElement('a'); link.download = `qc-update-${Date.now()}.png`; link.href = canvas.toDataURL(); link.click();
+    });
+
+    document.getElementById('export-excel-btn')?.addEventListener('click', exportToExcel);
+    document.getElementById('export-json-btn')?.addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `qc-data-${Date.now()}.json`; link.click();
+    });
+    document.getElementById('import-json-btn')?.addEventListener('click', () => document.getElementById('import-json-input')?.click());
+    document.getElementById('import-json-input')?.addEventListener('change', (e: any) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                state = JSON.parse(ev.target?.result as string);
+                renderAll(); save();
+                if(statusTxt) statusTxt.textContent = 'Imported';
+            } catch (err) { alert('Invalid file'); }
+        };
+        reader.readAsText(file);
+    });
+  }
+
   async function exportToExcel() {
-      updateStatus('Exporting...', 'orange', false);
-      const workbook = new ExcelJS.Workbook();
-      workbook.creator = 'VAY CHINNAKHET';
-      workbook.created = new Date();
-  
-      // --- Define Styles ---
-      const getFill = (color: string) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: color } });
-      const getFont = (color: string, bold: boolean = false) => ({ color: { argb: color }, bold });
-      const border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-      const centerAlign = { vertical: 'middle', horizontal: 'center' };
-
-      const styles: Record<string, any> = {
-          'neua-fa-plan': { fill: getFill('fddca9'), font: getFont('FF212121', true), border, alignment: centerAlign },
-          'neua-fa-actual': { fill: getFill('feefd8'), font: getFont('FF212121', true), border, alignment: centerAlign },
-          'neua-fa-header': { fill: getFill('f79646'), font: getFont('FF212121', true), border, alignment: centerAlign },
-          'qc-ww-plan': { fill: getFill('c9d8e8'), font: getFont('FF212121', true), border, alignment: centerAlign },
-          'qc-ww-actual': { fill: getFill('dce6f1'), font: getFont('FF212121', true), border, alignment: centerAlign },
-          'qc-ww-header': { fill: getFill('4f81bd'), font: getFont('FFFFFFFF', true), border, alignment: centerAlign },
-          'qc-end-plan': { fill: getFill('e2eacb'), font: getFont('FF212121', true), border, alignment: centerAlign },
-          'qc-end-actual': { fill: getFill('ebf1de'), font: getFont('FF212121', true), border, alignment: centerAlign },
-          'qc-end-header': { fill: getFill('9bbb59'), font: getFont('FF212121', true), border, alignment: centerAlign },
-          'inactive-cell': { fill: getFill('FFF5F5F5'), font: getFont('FFBDBDBD'), border, alignment: centerAlign },
-          'default': { border, alignment: centerAlign },
-          'header': { font: { bold: true }, border, alignment: centerAlign, fill: getFill('FFE0E0E0') },
-          'row-label': { font: { bold: true }, border, alignment: { vertical: 'middle', horizontal: 'left', indent: 1 } },
-          'footer': { font: { bold: true }, border, alignment: centerAlign, fill: getFill('FFFFFDE7')},
-      };
-    
-      // --- MAIN SCHEDULE SHEET ---
-      const mainSheet = workbook.addWorksheet('Schedule Update');
-
-      mainSheet.columns = [
-          { width: 5 }, { width: 8 }, { width: 8 }, { width: 8 },
-          { width: 8 }, { width: 8 }, { width: 8 }, { width: 8 },
-          ...Array(WEEKS).fill({ width: 8 }),
-          { width: 10 }
-      ];
-
-      // Dynamic Header Row 1: Months
-      const header1Values = ['ชั้น', 'เหนือผ้า', '', 'QC WW', '', 'QC End', '', ''];
-      MONTH_HEADERS.forEach(m => {
-          header1Values.push(m.name);
-          for(let i=1; i<m.span; i++) header1Values.push('');
-      });
-      header1Values.push('หมายเหตุ');
-      
-      const headerRow1 = mainSheet.addRow(header1Values);
-      headerRow1.eachCell(c => c.style = styles.header!);
-    
-      // Dynamic Header Row 2: Weeks
-      const headerRow2 = mainSheet.addRow([
-          '', 'ทั้งหมด', 'ส่ง', 'ทั้งหมด', 'ส่ง', 'ทั้งหมด', 'ส่ง', '',
-          ...WEEK_HEADERS.map(h => h.split('/')[0]), ''
-      ]);
-      headerRow2.eachCell(c => c.style = styles.header!);
-    
-      // Fixed Merges
-      mainSheet.mergeCells('A1:A2'); mainSheet.mergeCells('H1:H2'); 
-      mainSheet.mergeCells('B1:C1'); mainSheet.mergeCells('D1:E1'); mainSheet.mergeCells('F1:G1');
-      
-      // Note column merge (Last column)
-      const noteColIdx = 9 + WEEKS;
-      mainSheet.mergeCells(1, noteColIdx, 2, noteColIdx);
-
-      // Dynamic Month Merges
-      let colPtr = 9;
-      MONTH_HEADERS.forEach(m => {
-          if (m.span > 1) {
-              mainSheet.mergeCells(1, colPtr, 1, colPtr + m.span - 1);
-          }
-          colPtr += m.span;
-      });
-
-      ['B1', 'D1', 'F1'].forEach((cell, index) => {
-        mainSheet.getCell(cell).style = styles[['neua-fa-header', 'qc-ww-header', 'qc-end-header'][index]]!;
-      });
-      ['B2', 'D2', 'F2', 'C2', 'E2', 'G2'].forEach((cell, index) => {
-          mainSheet.getCell(cell).style = styles[['neua-fa-header', 'qc-ww-header', 'qc-end-header', 'neua-fa-header', 'qc-ww-header', 'qc-end-header'][index]]!;
-      });
-
-
-      // Data Rows
-      FLOORS.forEach(floor => {
-          const floorTotals: Record<Task, { plan: number, actual: number }> = {
-              'neua-fa': { plan: 0, actual: 0 },
-              'qc-ww': { plan: 0, actual: 0 },
-              'qc-end': { plan: 0, actual: 0 }
-          };
-          for (let week = 0; week < WEEKS; week++) {
-              const planData = state[floor][week].plan;
-              if (planData.task && planData.value) floorTotals[planData.task].plan += planData.value;
-              const actualData = state[floor][week].actual;
-              if (actualData) {
-                  for (const task of Object.keys(actualData) as Task[]) {
-                      if(actualData[task]) floorTotals[task].actual += actualData[task]!;
-                  }
-              }
-          }
-
-          const planRow = mainSheet.addRow([
-              floor,
-              floorTotals['neua-fa'].plan > 0 ? floorTotals['neua-fa'].plan : '',
-              floorTotals['neua-fa'].actual > 0 ? floorTotals['neua-fa'].actual : '',
-              floorTotals['qc-ww'].plan > 0 ? floorTotals['qc-ww'].plan : '',
-              floorTotals['qc-ww'].actual > 0 ? floorTotals['qc-ww'].actual : '',
-              floorTotals['qc-end'].plan > 0 ? floorTotals['qc-end'].plan : '',
-              floorTotals['qc-end'].actual > 0 ? floorTotals['qc-end'].actual : '',
-              'Plan',
-              ...Array.from({length: WEEKS}, (_, i) => state[floor][i].plan.value || ''),
-              ''
-          ]);
-
-          const actualRowValues = Array.from({length: WEEKS}, (_, i) => {
-            const actualCellData = state[floor][i].actual;
-            if (!actualCellData) return '';
-            const totalValue = Object.values(actualCellData).reduce((sum, val) => sum + (val || 0), 0);
-            return totalValue > 0 ? totalValue : '';
-          });
-
-          const actualRow = mainSheet.addRow([
-              '', '', '', '', '', '', '', // for merge
-              'Actual',
-              ...actualRowValues,
-              ''
-          ]);
-        
-          const startRowNum = planRow.number;
-          const endRowNum = actualRow.number;
-
-          // Merge cells
-          mainSheet.mergeCells(`A${startRowNum}:A${endRowNum}`);
-          mainSheet.mergeCells(`B${startRowNum}:B${endRowNum}`); // neua-fa total
-          mainSheet.mergeCells(`C${startRowNum}:C${endRowNum}`); // neua-fa sent
-          mainSheet.mergeCells(`D${startRowNum}:D${endRowNum}`); // qc-ww total
-          mainSheet.mergeCells(`E${startRowNum}:E${endRowNum}`); // qc-ww sent
-          mainSheet.mergeCells(`F${startRowNum}:F${endRowNum}`); // qc-end total
-          mainSheet.mergeCells(`G${startRowNum}:G${endRowNum}`); // qc-end sent
-          // Note column merge
-          mainSheet.mergeCells(startRowNum, noteColIdx, endRowNum, noteColIdx);
-        
-          // --- Styling ---
-          mainSheet.getCell(`A${startRowNum}`).style = styles.default!;
-          planRow.getCell(8).style = styles['row-label']!;
-          actualRow.getCell(8).style = styles['row-label']!;
-        
-          mainSheet.getCell(`B${startRowNum}`).style = styles['neua-fa-plan']!;
-          mainSheet.getCell(`C${startRowNum}`).style = styles['neua-fa-plan']!;
-          mainSheet.getCell(`D${startRowNum}`).style = styles['qc-ww-plan']!;
-          mainSheet.getCell(`E${startRowNum}`).style = styles['qc-ww-plan']!;
-          mainSheet.getCell(`F${startRowNum}`).style = styles['qc-end-plan']!;
-          mainSheet.getCell(`G${startRowNum}`).style = styles['qc-end-plan']!;
-
-          // Style Weekly Data Cells
-          for(let week = 0; week < WEEKS; week++) {
-              const col = 9 + week;
-              const planTask = state[floor][week].plan.task;
-              if(planTask) planRow.getCell(col).style = styles[`${planTask}-plan`]!;
-              else planRow.getCell(col).style = styles.default!;
-
-              const actualData = state[floor][week].actual;
-              const actualTasks = actualData ? Object.keys(actualData).filter(t => actualData[t as Task]) as Task[] : [];
-
-              if(actualTasks.length > 0) {
-                  // Style with the first task's color for simplicity in Excel
-                  actualRow.getCell(col).style = styles[`${actualTasks[0]}-actual`]!;
-              }
-              else actualRow.getCell(col).style = styles.default!;
-          }
-      });
-
-      // Footer Row
-      const summaryData = getSummaryData();
-      const footerValues: (string|number)[] = ['รวม'];
-      ['neua-fa', 'qc-ww', 'qc-end'].forEach(task => {
-          const totalPlan = summaryData[task as Task].plan.reduce((a, b) => a + b, 0);
-          const totalActual = summaryData[task as Task].actual.reduce((a, b) => a + b, 0);
-          footerValues.push(totalPlan > 0 ? totalPlan.toString() : '');
-          footerValues.push(totalActual > 0 ? totalActual.toString() : '');
-      });
-      footerValues.push(''); // for Plan/Actual label column
-      const footerRow = mainSheet.addRow(footerValues);
-      
-      // Style footer cells individually
-      footerRow.getCell(1).style = styles.footer!; // 'รวม'
-      footerRow.getCell(2).style = styles['neua-fa-plan']!;
-      footerRow.getCell(3).style = styles['neua-fa-plan']!;
-      footerRow.getCell(4).style = styles['qc-ww-plan']!;
-      footerRow.getCell(5).style = styles['qc-ww-plan']!;
-      footerRow.getCell(6).style = styles['qc-end-plan']!;
-      footerRow.getCell(7).style = styles['qc-end-plan']!;
-      footerRow.getCell(8).style = styles.footer!; // Empty cell for Plan/Actual label
-
-      // --- SUMMARY SHEETS ---
-      SUMMARY_TASKS.forEach(taskInfo => {
-          const sheet = workbook.addWorksheet(taskInfo.name);
-          sheet.columns = [{ width: 12 }, ...Array(WEEKS).fill({ width: 10 })];
-        
-          const headerRow = sheet.addRow([taskInfo.name]);
-          headerRow.getCell(1).style = styles[`${taskInfo.id}-header`]!;
-          headerRow.getCell(1).font = { ...styles[`${taskInfo.id}-header`]!.font, size: 14 };
-          sheet.mergeCells(1, 1, 1, WEEKS + 1);
-        
-          const weekHeaderRow = sheet.addRow(['', ...WEEK_HEADERS]);
-          weekHeaderRow.getCell(1).style = styles['row-label']!;
-          weekHeaderRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-              if (colNumber > 1) cell.style = styles.header!;
-          });
-          
-          const planRange = getTaskWeekRange(taskInfo.id, 'plan');
-          const actualRange = getTaskWeekRange(taskInfo.id, 'actual');
-
-          // Row 1: Plan
-          const planRow = sheet.addRow(['Plan']);
-          planRow.getCell(1).style = styles['row-label']!;
-          for (let week = 0; week < WEEKS; week++) {
-              const cell = planRow.getCell(week + 2);
-              if (planRange.first !== -1 && week >= planRange.first && week <= planRange.last) {
-                  const val = summaryData[taskInfo.id].plan[week];
-                  cell.value = val > 0 ? val : null;
-                  cell.style = styles.default!;
-              } else {
-                  cell.value = null;
-                  cell.style = styles['inactive-cell']!;
-              }
-          }
-          
-          // Row 2: Acc. Plan
-          const accPlanRow = sheet.addRow(['Acc. Plan']);
-          accPlanRow.getCell(1).style = styles['row-label']!;
-          let accPlan = 0;
-          for (let week = 0; week < WEEKS; week++) {
-              accPlan += summaryData[taskInfo.id].plan[week];
-              const cell = accPlanRow.getCell(week + 2);
-              if (planRange.first !== -1 && week >= planRange.first && week <= planRange.last) {
-                  cell.value = accPlan > 0 ? accPlan : null;
-                  cell.style = styles.default!;
-              } else {
-                  cell.value = null;
-                  cell.style = styles['inactive-cell']!;
-              }
-          }
-
-          // Row 3: Actual
-          const actualRowSheet = sheet.addRow(['Actual']);
-          actualRowSheet.getCell(1).style = styles['row-label']!;
-          for (let week = 0; week < WEEKS; week++) {
-              const cell = actualRowSheet.getCell(week + 2);
-              if (actualRange.first !== -1 && week >= actualRange.first && week <= actualRange.last) {
-                  const val = summaryData[taskInfo.id].actual[week];
-                  cell.value = val > 0 ? val : null;
-                  cell.style = styles.default!;
-              } else {
-                  cell.value = null;
-                  cell.style = styles['inactive-cell']!;
-              }
-          }
-
-          // Row 4: Acc. Actual
-          const accActualRow = sheet.addRow(['Acc. Actual']);
-          accActualRow.getCell(1).style = styles['row-label']!;
-          let accActual = 0;
-          for (let week = 0; week < WEEKS; week++) {
-              accActual += summaryData[taskInfo.id].actual[week];
-              const cell = accActualRow.getCell(week + 2);
-              if (actualRange.first !== -1 && week >= actualRange.first && week <= actualRange.last) {
-                  cell.value = accActual > 0 ? accActual : null;
-                  cell.style = styles.default!;
-              } else {
-                  cell.value = null;
-                  cell.style = styles['inactive-cell']!;
-              }
-          }
-      });
-
-      // --- DOWNLOAD ---
-      try {
-          const buffer = await workbook.xlsx.writeBuffer();
-          const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = 'schedule_update.xlsx';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          updateStatus('Export Successful!', 'green');
-      } catch (error) {
-          console.error('Failed to export to Excel:', error);
-          updateStatus('Export Failed!', 'red');
-      }
+    if (!ExcelJS) return;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('QC Update');
+    sheet.addRow(['QC Project Update Dashboard']);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'qc_update.xlsx'; link.click();
   }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    mainBody = document.querySelector('#main-schedule-table tbody');
+    popover = document.getElementById('popover');
+    popInput = document.getElementById('popover-input') as HTMLInputElement;
+    syncDot = document.getElementById('sync-dot');
+    statusTxt = document.getElementById('status-indicator');
+
+    generateWeeks();
+    createMainTable();
+    createSummaryTables();
+    await initState();
+    setupRealtime();
+    addEvents();
+    renderAll();
+    if(syncDot) syncDot.classList.add('active');
+  });
 })();
